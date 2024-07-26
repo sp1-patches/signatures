@@ -275,6 +275,7 @@ where
         Self::recover_from_prehash(&msg_digest.finalize(), signature, recovery_id)
     }
 
+    #[cfg(not(all(target_os = "zkvm", target_vendor = "succinct")))]
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
     /// signature over that prehashed message, and a [`RecoveryId`].
     #[allow(non_snake_case)]
@@ -312,6 +313,24 @@ where
         // Ensure signature verifies with the recovered key
         vk.verify_prehash(prehash, signature)?;
 
+        Ok(vk)
+    }
+
+    #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+    /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
+    /// signature over that prehashed message, and a [`RecoveryId`].
+    #[allow(non_snake_case)]
+    pub fn recover_from_prehash(
+        prehash: &[u8],
+        signature: &Signature<C>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self> {
+        let sig_bytes = signature.to_bytes();
+        let mut sig = [0u8; 65];
+        sig[..64].copy_from_slice(&sig_bytes);
+        sig[64] = recovery_id.to_byte();
+        let pubkey = sp1_lib::secp256k1::ecrecover(&sig, &prehash).expect("ecrecover failed");
+        let vk = VerifyingKey::from_sec1_bytes(&pubkey)?;
         Ok(vk)
     }
 }

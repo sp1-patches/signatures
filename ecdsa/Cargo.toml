@@ -27,6 +27,9 @@ serdect = { version = "0.2", optional = true, default-features = false, features
 sha2 = { version = "0.10", optional = true, default-features = false, features = ["oid"] }
 spki = { version = "0.7.2", optional = true, default-features = false }
 
+[target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
+sp1-lib = { version = "1.0.1", features = ["secp256k1"] }
+
 [dev-dependencies]
 elliptic-curve = { version = "0.13", default-features = false, features = ["dev"] }
 hex-literal = "0.4"
