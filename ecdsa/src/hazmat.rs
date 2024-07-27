@@ -266,7 +266,10 @@ where
 /// - `z`: message digest to be verified. MUST BE OUTPUT OF A
 ///        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
 /// - `sig`: signature to be verified against the key and message.
-#[cfg(feature = "arithmetic")]
+#[cfg(all(
+    feature = "arithmetic",
+    not(all(target_os = "zkvm", target_vendor = "succinct"))
+))]
 pub fn verify_prehashed<C>(
     q: &ProjectivePoint<C>,
     z: &FieldBytes<C>,
@@ -289,6 +292,86 @@ where
         Ok(())
     } else {
         Err(Error::new())
+    }
+}
+
+#[cfg(all(
+    feature = "arithmetic",
+    all(target_os = "zkvm", target_vendor = "succinct")
+))]
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))] {
+        use sp1_lib::secp256k1::Secp256k1AffinePoint;
+        use sp1_lib::utils::AffinePoint;
+        use crate::NonZeroScalar;
+        fn double_and_add_base<C: PrimeCurve + CurveArithmetic>(a: Scalar<C>, b: Scalar<C>, B: Secp256k1AffinePoint) -> Option<Secp256k1AffinePoint>  where
+            C: PrimeCurve + CurveArithmetic,
+            SignatureSize<C>: ArrayLength<u8>, {
+                let mut res: Option<Secp256k1AffinePoint> = None;
+
+                let mut temp_a = Secp256k1AffinePoint::new(Secp256k1AffinePoint::GENERATOR);
+                let mut temp_b = B.clone();
+
+                // Convert Scalar([u8; 32]) to bits
+                let binding = a.to_repr();
+                let a_bytes = binding.as_slice();
+                let a_bits = a_bytes.iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+                let binding = b.to_repr();
+                let b_bytes = binding.as_slice();
+                let b_bits = b_bytes.iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+
+                for (a_bit, b_bit) in a_bits.zip(b_bits) {
+                    if a_bit {
+                        match res.as_mut() {
+                            Some(res) => res.add_assign(&temp_a),
+                            None => res = Some(temp_a),
+                        };
+                    }
+
+                    if b_bit {
+                        match res.as_mut() {
+                            Some(res) => res.add_assign(&temp_b),
+                            None => res = Some(temp_b),
+                        };
+                    }
+
+                    temp_a.double();
+                    temp_b.double();
+                }
+                res
+        }
+
+        pub fn verify_prehashed<C>(
+            q: &ProjectivePoint<C>,
+            z: &FieldBytes<C>,
+            sig: &Signature<C>,
+        ) -> Result<()>
+        where
+            C: PrimeCurve + CurveArithmetic,
+            SignatureSize<C>: ArrayLength<u8>,
+        {
+            let z = Scalar::<C>::reduce_bytes(z);
+            let (r, s) = sig.split_scalars();
+            let s_inv = *s.invert_vartime();
+            let u1 = z * s_inv;
+            let u2 = *r * s_inv;
+
+            let res = double_and_add_base(u1, u2, &affine).unwrap();
+            let mut x_bytes_be = [0u8; 32];
+            for i in 0..8 {
+                x_bytes_be[i * 4..(i * 4) + 4].copy_from_slice(&res.limbs[i].to_le_bytes());
+            }
+            x_bytes_be.reverse();
+
+            let x_field = bits2field::<C>(&x_bytes_be);
+            if x_field.is_err() {
+                return Err(Error::new());
+            }
+            assert!(*r == Scalar::from_repr(x_field.unwrap()).unwrap());
+            Ok(())
+        }
     }
 }
 
