@@ -12,9 +12,13 @@
 
 use crate::{Error, Result};
 use core::cmp;
-use elliptic_curve::{generic_array::typenum::Unsigned, FieldBytes, PrimeCurve};
+use elliptic_curve::{
+    ff::PrimeFieldBits, generic_array::typenum::Unsigned, scalar::ScalarBits, FieldBytes,
+    PrimeCurve,
+};
+use sp1_lib::syscall_secp256k1_decompress;
 
-#[cfg(feature = "arithmetic")]
+// #[cfg(feature = "arithmetic")]
 use {
     crate::{RecoveryId, SignatureSize},
     elliptic_curve::{
@@ -40,7 +44,7 @@ use {
 #[cfg(feature = "rfc6979")]
 use elliptic_curve::{FieldBytesEncoding, ScalarPrimitive};
 
-#[cfg(any(feature = "arithmetic", feature = "digest"))]
+// #[cfg(any(feature = "arithmetic", feature = "digest"))]
 use crate::{elliptic_curve::generic_array::ArrayLength, Signature};
 
 /// Try to sign the given prehashed message using ECDSA.
@@ -258,54 +262,51 @@ where
     Ok((signature, recovery_id))
 }
 
-/// Verify the prehashed message against the provided ECDSA signature.
-///
-/// Accepts the following arguments:
-///
-/// - `q`: public key with which to verify the signature.
-/// - `z`: message digest to be verified. MUST BE OUTPUT OF A
-///        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
-/// - `sig`: signature to be verified against the key and message.
-#[cfg(all(
-    feature = "arithmetic",
-    not(all(target_os = "zkvm", target_vendor = "succinct"))
-))]
-pub fn verify_prehashed<C>(
-    q: &ProjectivePoint<C>,
-    z: &FieldBytes<C>,
-    sig: &Signature<C>,
-) -> Result<()>
-where
-    C: PrimeCurve + CurveArithmetic,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    let z = Scalar::<C>::reduce_bytes(z);
-    let (r, s) = sig.split_scalars();
-    let s_inv = *s.invert_vartime();
-    let u1 = z * s_inv;
-    let u2 = *r * s_inv;
-    let x = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, q, &u2)
-        .to_affine()
-        .x();
+// / Verify the prehashed message against the provided ECDSA signature.
+// /
+// / Accepts the following arguments:
+// /
+// / - `q`: public key with which to verify the signature.
+// / - `z`: message digest to be verified. MUST BE OUTPUT OF A
+// /        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
+// / - `sig`: signature to be verified against the key and message.
+// #[cfg(all(
+//     feature = "arithmetic",
+//     not(all(target_os = "zkvm", target_vendor = "succinct"))
+// ))]
+// pub fn verify_prehashed<C>(
+//     q: &ProjectivePoint<C>,
+//     z: &FieldBytes<C>,
+//     sig: &Signature<C>,
+// ) -> Result<()>
+// where
+//     C: PrimeCurve + CurveArithmetic,
+//     SignatureSize<C>: ArrayLength<u8>,
+// {
+//     let z = Scalar::<C>::reduce_bytes(z);
+//     let (r, s) = sig.split_scalars();
+//     let s_inv = *s.invert_vartime();
+//     let u1 = z * s_inv;
+//     let u2 = *r * s_inv;
+//     let x = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, q, &u2)
+//         .to_affine()
+//         .x();
 
-    if *r == Scalar::<C>::reduce_bytes(&x) {
-        Ok(())
-    } else {
-        Err(Error::new())
-    }
-}
+//     if *r == Scalar::<C>::reduce_bytes(&x) {
+//         Ok(())
+//     } else {
+//         Err(Error::new())
+//     }
+// }
 
-#[cfg(all(
-    feature = "arithmetic",
-    all(target_os = "zkvm", target_vendor = "succinct")
-))]
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))] {
+    if #[cfg(not(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct")))] {
+    // if #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))] {
         use sp1_lib::secp256k1::Secp256k1AffinePoint;
-        use sp1_lib::utils::AffinePoint;
-        use crate::NonZeroScalar;
+        use sp1_lib::utils::{AffinePoint, bytes_to_words_le};
+        // use elliptic_curve::Scalar as EllipticCurveScalar;
         fn double_and_add_base<C: PrimeCurve + CurveArithmetic>(a: Scalar<C>, b: Scalar<C>, B: Secp256k1AffinePoint) -> Option<Secp256k1AffinePoint>  where
             C: PrimeCurve + CurveArithmetic,
             SignatureSize<C>: ArrayLength<u8>, {
@@ -314,13 +315,14 @@ cfg_if! {
                 let mut temp_a = Secp256k1AffinePoint::new(Secp256k1AffinePoint::GENERATOR);
                 let mut temp_b = B.clone();
 
+                #[cfg(feature = "bits")]
+                a.0
+
                 // Convert Scalar([u8; 32]) to bits
                 let binding = a.to_repr();
-                let a_bytes = binding.as_slice();
-                let a_bits = a_bytes.iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+                let a_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
                 let binding = b.to_repr();
-                let b_bytes = binding.as_slice();
-                let b_bits = b_bytes.iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+                let b_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
 
                 for (a_bit, b_bit) in a_bits.zip(b_bits) {
                     if a_bit {
@@ -343,6 +345,31 @@ cfg_if! {
                 res
         }
 
+        fn decompress_pubkey<C>(q: &ProjectivePoint<C>) -> Secp256k1AffinePoint where
+            C: PrimeCurve + CurveArithmetic,
+            SignatureSize<C>: ArrayLength<u8>,
+        {
+            let q_affine = q.to_affine();
+            let q_affine_x = q_affine.x();
+            let is_odd = q_affine.y_is_odd().into();
+            let mut decompressed_key = [0u8; 64];
+            decompressed_key[..32].copy_from_slice(&q_affine_x);
+            unsafe {
+                syscall_secp256k1_decompress(&mut decompressed_key, is_odd)
+            }
+
+            // Convert the now decompressed pubkey into a Secp256k1AffinePoint
+            Secp256k1AffinePoint::new(bytes_to_words_le(&decompressed_key).try_into().unwrap())
+        }
+
+        /// Verify the prehashed message against the provided ECDSA signature uses the SP1 precompile.
+        ///
+        /// Accepts the following arguments:
+        ///
+        /// - `q`: public key with which to verify the signature.
+        /// - `z`: message digest to be verified. MUST BE OUTPUT OF A
+        ///        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
+        /// - `sig`: signature to be verified against the key and message.
         pub fn verify_prehashed<C>(
             q: &ProjectivePoint<C>,
             z: &FieldBytes<C>,
@@ -358,19 +385,30 @@ cfg_if! {
             let u1 = z * s_inv;
             let u2 = *r * s_inv;
 
-            let res = double_and_add_base(u1, u2, &affine).unwrap();
-            let mut x_bytes_be = [0u8; 32];
-            for i in 0..8 {
-                x_bytes_be[i * 4..(i * 4) + 4].copy_from_slice(&res.limbs[i].to_le_bytes());
-            }
-            x_bytes_be.reverse();
+            let pubkey = decompress_pubkey::<C>(q);
 
-            let x_field = bits2field::<C>(&x_bytes_be);
-            if x_field.is_err() {
-                return Err(Error::new());
+            // let res = double_and_add_base::<C>(u1, u2, pubkey).unwrap();
+            // let mut x_bytes_be = [0u8; 32];
+            // for i in 0..8 {
+            //     x_bytes_be[i * 4..(i * 4) + 4].copy_from_slice(&res.limbs_ref()[i].to_le_bytes());
+            // }
+            // x_bytes_be.reverse();
+
+            // let x_field = bits2field::<C>(&x_bytes_be);
+            // if x_field.is_err() {
+            //     return Err(Error::new());
+            // }
+            // assert!(*r == <C as CurveArithmetic>::Scalar::from_repr(x_field.unwrap()).unwrap());
+            // Ok(())
+            let x = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, q, &u2)
+                .to_affine()
+                .x();
+
+            if *r == Scalar::<C>::reduce_bytes(&x) {
+                Ok(())
+            } else {
+                Err(Error::new())
             }
-            assert!(*r == Scalar::from_repr(x_field.unwrap()).unwrap());
-            Ok(())
         }
     }
 }

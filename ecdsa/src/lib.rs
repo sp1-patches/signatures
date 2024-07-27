@@ -5,7 +5,7 @@
     html_logo_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg",
     html_favicon_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg"
 )]
-#![forbid(unsafe_code)]
+// #![forbid(unsafe_code)]
 #![warn(
     clippy::cast_lossless,
     clippy::cast_possible_truncation,
@@ -64,7 +64,7 @@ mod recovery;
 pub mod der;
 #[cfg(feature = "dev")]
 pub mod dev;
-#[cfg(feature = "hazmat")]
+// #[cfg(feature = "hazmat")]
 pub mod hazmat;
 #[cfg(feature = "signing")]
 mod signing;

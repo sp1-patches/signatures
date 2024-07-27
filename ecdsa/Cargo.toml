@@ -16,33 +16,47 @@ edition = "2021"
 rust-version = "1.65"
 
 [dependencies]
-elliptic-curve = { version = "0.13.6", default-features = false, features = ["digest", "sec1", "bits"] }
-signature = { version = "2.0, <2.3", default-features = false, features = ["rand_core"] }
+elliptic-curve = { version = "0.13.6", default-features = false, features = [
+    "digest",
+    "sec1",
+] }
+signature = { version = "2.0, <2.3", default-features = false, features = [
+    "rand_core",
+] }
 cfg-if = "1.0"
 
-[target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
+# [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 # sp1-lib = { version = "1.0.1", features = ["secp256k1"] }
 sp1-lib = { path = "../../../vm/sp1/zkvm/lib" }
 
 # optional dependencies
 der = { version = "0.7", optional = true }
-digest = { version = "0.10.7", optional = true, default-features = false, features = ["oid"] }
+digest = { version = "0.10.7", optional = true, default-features = false, features = [
+    "oid",
+] }
 rfc6979 = { version = "0.4", optional = true, path = "../rfc6979" }
-serdect = { version = "0.2", optional = true, default-features = false, features = ["alloc"] }
-sha2 = { version = "0.10", optional = true, default-features = false, features = ["oid"] }
+serdect = { version = "0.2", optional = true, default-features = false, features = [
+    "alloc",
+] }
+sha2 = { version = "0.10", optional = true, default-features = false, features = [
+    "oid",
+] }
 spki = { version = "0.7.2", optional = true, default-features = false }
 
 [dev-dependencies]
-elliptic-curve = { version = "0.13", default-features = false, features = ["dev"] }
+elliptic-curve = { version = "0.13", default-features = false, features = [
+    "dev",
+] }
 hex-literal = "0.4"
 sha2 = { version = "0.10", default-features = false }
 
 [features]
-default = ["digest"]
+default = ["digest", "arithmetic", "bits"]
 alloc = ["elliptic-curve/alloc", "signature/alloc", "spki/alloc"]
 std = ["alloc", "elliptic-curve/std", "signature/std"]
+bits = ["elliptic-curve/bits"]
 
-arithmetic = ["elliptic-curve/arithmetic"]
+arithmetic = ["elliptic-curve/arithmetic", "elliptic-curve/bits"]
 dev = ["arithmetic", "digest", "elliptic-curve/dev", "hazmat"]
 digest = ["dep:digest", "signature/digest"]
 hazmat = []
