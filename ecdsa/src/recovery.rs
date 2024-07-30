@@ -34,6 +34,13 @@ use {
     signature::digest::Digest,
 };
 
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        use digest::generic_array::GenericArray;
+        use elliptic_curve::Curve;
+    }
+}
+
 /// Recovery IDs, a.k.a. "recid".
 ///
 /// This is an integer value `0`, `1`, `2`, or `3` included along with a
@@ -283,6 +290,18 @@ where
         signature: &Signature<C>,
         recovery_id: RecoveryId,
     ) -> Result<Self> {
+        // Only override the recovery function if this is a secp256k1 curve and the prehash is 32 bytes long (indicating a SHA-256 hash).
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                const SECP256K1_ORDER: [u8; 32] =
+                hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+
+                // TODO: Add a check for field bytes size? (ex. <C as Curve>::FieldBytesSize::USIZE == 32)
+                if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) && prehash.len() == 32 {
+                    return Self::recover_from_prehash_secp256k1(prehash, signature, recovery_id);
+                }
+            }
+        }
         let (r, s) = signature.split_scalars();
         let z = <Scalar<C> as Reduce<C::Uint>>::reduce_bytes(&bits2field::<C>(prehash)?);
 
