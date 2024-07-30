@@ -665,6 +665,7 @@ checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 [[package]]
 name = "sp1-lib"
 version = "1.0.1"
+source = "git+https://github.com/succinctlabs/sp1.git?branch=john/lib-refactor#d412a24c036e346b11384308e1f8c6f638782515"
 dependencies = [
  "anyhow",
  "bincode",
