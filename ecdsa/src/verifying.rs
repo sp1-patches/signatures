@@ -6,6 +6,7 @@ use crate::{
 };
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
+    ff::PrimeFieldBits,
     generic_array::ArrayLength,
     point::PointCompression,
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},

@@ -51,7 +51,7 @@ hex-literal = "0.4"
 sha2 = { version = "0.10", default-features = false }
 
 [features]
-default = ["digest", "arithmetic", "bits"]
+default = ["digest", "arithmetic", "bits", "verifying"]
 alloc = ["elliptic-curve/alloc", "signature/alloc", "spki/alloc"]
 std = ["alloc", "elliptic-curve/std", "signature/std"]
 bits = ["elliptic-curve/bits"]

@@ -12,11 +12,7 @@
 
 use crate::{Error, Result};
 use core::cmp;
-use elliptic_curve::{
-    ff::PrimeFieldBits, generic_array::typenum::Unsigned, scalar::ScalarBits, FieldBytes,
-    PrimeCurve,
-};
-use sp1_lib::syscall_secp256k1_decompress;
+use elliptic_curve::{generic_array::typenum::Unsigned, FieldBytes, PrimeCurve};
 
 // #[cfg(feature = "arithmetic")]
 use {
@@ -262,70 +258,96 @@ where
     Ok((signature, recovery_id))
 }
 
-// / Verify the prehashed message against the provided ECDSA signature.
-// /
-// / Accepts the following arguments:
-// /
-// / - `q`: public key with which to verify the signature.
-// / - `z`: message digest to be verified. MUST BE OUTPUT OF A
-// /        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
-// / - `sig`: signature to be verified against the key and message.
-// #[cfg(all(
-//     feature = "arithmetic",
-//     not(all(target_os = "zkvm", target_vendor = "succinct"))
-// ))]
-// pub fn verify_prehashed<C>(
-//     q: &ProjectivePoint<C>,
-//     z: &FieldBytes<C>,
-//     sig: &Signature<C>,
-// ) -> Result<()>
-// where
-//     C: PrimeCurve + CurveArithmetic,
-//     SignatureSize<C>: ArrayLength<u8>,
-// {
-//     let z = Scalar::<C>::reduce_bytes(z);
-//     let (r, s) = sig.split_scalars();
-//     let s_inv = *s.invert_vartime();
-//     let u1 = z * s_inv;
-//     let u2 = *r * s_inv;
-//     let x = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, q, &u2)
-//         .to_affine()
-//         .x();
+#[cfg(all(
+    feature = "arithmetic",
+    not(all(target_os = "zkvm", target_vendor = "succinct"))
+))]
+// #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))]
+/// Verify the prehashed message against the provided ECDSA signature.
+///
+/// Accepts the following arguments:
+///
+/// - `q`: public key with which to verify the signature.
+/// - `z`: message digest to be verified. MUST BE OUTPUT OF A
+///        CRYPTOGRAPHICALLY SECURE DIGEST ALGORITHM!!!
+/// - `sig`: signature to be verified against the key and message.
+pub fn verify_prehashed<C>(
+    q: &ProjectivePoint<C>,
+    z: &FieldBytes<C>,
+    sig: &Signature<C>,
+) -> Result<()>
+where
+    C: PrimeCurve + CurveArithmetic,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    let z = Scalar::<C>::reduce_bytes(z);
+    let (r, s) = sig.split_scalars();
+    let s_inv = *s.invert_vartime();
+    let u1 = z * s_inv;
+    let u2 = *r * s_inv;
+    let x = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, q, &u2)
+        .to_affine()
+        .x();
 
-//     if *r == Scalar::<C>::reduce_bytes(&x) {
-//         Ok(())
-//     } else {
-//         Err(Error::new())
-//     }
-// }
-
+    if *r == Scalar::<C>::reduce_bytes(&x) {
+        Ok(())
+    } else {
+        Err(Error::new())
+    }
+}
 use cfg_if::cfg_if;
 
+fn scalar_to_little_endian_bits<C: PrimeCurve + CurveArithmetic, const NUM_BITS: usize>(
+    scalar: &Scalar<C>,
+) -> [bool; NUM_BITS]
+where
+    C: PrimeCurve + CurveArithmetic,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    // Convert the scalar to its byte representation
+    let bytes = scalar.to_repr();
+
+    // Create a vector to hold the bits
+    let mut bits = [false; NUM_BITS];
+
+    // Iterate over each byte
+    for (byte_index, byte) in bytes.iter().enumerate() {
+        // Convert each byte to its bits in little endian order
+        for bit_index in 0..8 {
+            bits[byte_index * 8 + bit_index] = ((byte >> bit_index) & 1) == 1;
+        }
+    }
+
+    bits
+}
+
 cfg_if! {
-    if #[cfg(not(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct")))] {
-    // if #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))] {
+    // if #[cfg(not(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct")))] {
+    if #[cfg(all(feature = "arithmetic", target_os = "zkvm", target_vendor = "succinct"))] {
         use sp1_lib::secp256k1::Secp256k1AffinePoint;
+        use sp1_lib::syscall_secp256k1_decompress;
         use sp1_lib::utils::{AffinePoint, bytes_to_words_le};
+        use elliptic_curve::ff::PrimeFieldBits;
         // use elliptic_curve::Scalar as EllipticCurveScalar;
         fn double_and_add_base<C: PrimeCurve + CurveArithmetic>(a: Scalar<C>, b: Scalar<C>, B: Secp256k1AffinePoint) -> Option<Secp256k1AffinePoint>  where
             C: PrimeCurve + CurveArithmetic,
-            SignatureSize<C>: ArrayLength<u8>, {
+            SignatureSize<C>: ArrayLength<u8>,
+        {
                 let mut res: Option<Secp256k1AffinePoint> = None;
 
                 let mut temp_a = Secp256k1AffinePoint::new(Secp256k1AffinePoint::GENERATOR);
                 let mut temp_b = B.clone();
 
-                #[cfg(feature = "bits")]
-                a.0
-
+                let a_bits = scalar_to_little_endian_bits::<C, 256>(&a);
+                let b_bits = scalar_to_little_endian_bits::<C, 256>(&b);
                 // Convert Scalar([u8; 32]) to bits
-                let binding = a.to_repr();
-                let a_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
-                let binding = b.to_repr();
-                let b_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+                // let a_bits = a.to_le_bits();
+                // let a_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
+                // let b_bits = b.to_le_bits();
+                // let b_bits = binding.as_slice().iter().flat_map(|&byte| (0..8).rev().map(move |i| (byte >> i) & 1 == 1));
 
-                for (a_bit, b_bit) in a_bits.zip(b_bits) {
-                    if a_bit {
+                for (a_bit, b_bit) in a_bits.iter().zip(b_bits) {
+                    if *a_bit {
                         match res.as_mut() {
                             Some(res) => res.add_assign(&temp_a),
                             None => res = Some(temp_a),
@@ -343,6 +365,57 @@ cfg_if! {
                     temp_b.double();
                 }
                 res
+        }
+
+        fn verify_signature<C: PrimeCurve + CurveArithmetic>(
+            pubkey: &[u8; 65],
+            msg_hash: &[u8; 32],
+            signature: &Signature<C>,
+            s_inverse: Option<&Scalar<C>>,
+        ) -> bool where
+            C: PrimeCurve + CurveArithmetic,
+            SignatureSize<C>: ArrayLength<u8>,
+            {
+            let pubkey_x: Scalar<C> = <C as CurveArithmetic>::Scalar::from_repr(bits2field::<C>(&pubkey[1..33]).unwrap()).unwrap();
+            let pubkey_y: Scalar<C> = <C as CurveArithmetic>::Scalar::from_repr(bits2field::<C>(&pubkey[33..]).unwrap()).unwrap();
+            let mut pubkey_x_le_bytes: FieldBytes<C> = pubkey_x.into();
+            pubkey_x_le_bytes.reverse();
+            let mut pubkey_y_le_bytes: FieldBytes<C> = pubkey_y.into();
+            pubkey_y_le_bytes.reverse();
+            // Convert the public key to an affine point
+            let affine = Secp256k1AffinePoint::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat());
+            const GENERATOR: Secp256k1AffinePoint = Secp256k1AffinePoint(Secp256k1AffinePoint::GENERATOR);
+            let field = bits2field::<C>(msg_hash);
+            if field.is_err() {
+                return false;
+            }
+            let field: Scalar<C> = <C as CurveArithmetic>::Scalar::from_repr(field.unwrap()).unwrap();
+            let z = field;
+            let (r, s) = signature.split_scalars();
+            let computed_s_inv;
+            let s_inv = match s_inverse {
+                Some(s_inv) => {
+                    assert_eq!(*s_inv * s.as_ref(), <C as CurveArithmetic>::Scalar::ONE);
+                    s_inv
+                }
+                None => {
+                    computed_s_inv = s.invert();
+                    &computed_s_inv
+                }
+            };
+            let u1 = z * s_inv;
+            let u2 = *r * s_inv;
+            let res = double_and_add_base::<C>(u1, u2, affine).unwrap();
+            let mut x_bytes_be = [0u8; 32];
+            for i in 0..8 {
+                x_bytes_be[i * 4..(i * 4) + 4].copy_from_slice(&res.to_le_bytes());
+            }
+            x_bytes_be.reverse();
+            let x_field = bits2field::<C>(&x_bytes_be);
+            if x_field.is_err() {
+                return false;
+            }
+            *r == <C as CurveArithmetic>::Scalar::from_repr(x_field.unwrap()).unwrap()
         }
 
         fn decompress_pubkey<C>(q: &ProjectivePoint<C>) -> Secp256k1AffinePoint where
@@ -386,6 +459,7 @@ cfg_if! {
             let u2 = *r * s_inv;
 
             let pubkey = decompress_pubkey::<C>(q);
+
 
             // let res = double_and_add_base::<C>(u1, u2, pubkey).unwrap();
             // let mut x_bytes_be = [0u8; 32];
