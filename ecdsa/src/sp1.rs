@@ -35,7 +35,6 @@ where
     ///
     /// This function is only enabled inside of SP1 programs, and accelerates the
     /// recovery process using SP1 syscalls for secp256k1.
-    #[allow(non_snake_case)]
     pub fn recover_from_prehash_secp256k1(
         prehash: &[u8],
         signature: &Signature<C>,
