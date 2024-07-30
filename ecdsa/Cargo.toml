@@ -42,6 +42,7 @@ sha2 = { version = "0.10", optional = true, default-features = false, features =
     "oid",
 ] }
 spki = { version = "0.7.2", optional = true, default-features = false }
+log = "0.4"
 
 [dev-dependencies]
 elliptic-curve = { version = "0.13", default-features = false, features = [
