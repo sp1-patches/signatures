@@ -15,17 +15,13 @@ use sp1_lib::{
     utils::AffinePoint as Sp1AffinePoint,
 };
 
-use crate::{
-    hazmat::{bits2field, VerifyPrimitive},
-    Signature, SignatureSize, VerifyingKey,
-};
+use crate::{hazmat::bits2field, Signature, SignatureSize, VerifyingKey};
 
 #[cfg(feature = "verifying")]
 impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>:
-        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    AffinePoint<C>: DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
     FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
@@ -57,7 +53,7 @@ where
         let verified = Self::verify_signature_secp256k1(
             &pubkey,
             &prehash.try_into().unwrap(),
-            &Signature::from_slice(&sig_bytes[..64]).unwrap(),
+            &signature,
             &s_inverse,
         );
 
@@ -69,11 +65,11 @@ where
         }
     }
 
-
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
     /// Accepts the following arguments:
-    /// - `pubkey`: The public key to verify the signature against.
+    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1AffinePoint.
     /// - `msg_hash`: The prehashed message to verify the signature against.
     /// - `signature`: The signature to verify.
     /// - `s_inverse`: The inverse of the scalar `s` in the signature.
@@ -127,10 +123,9 @@ where
 
         // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
         let mut x_bytes_be = [0u8; 32];
-        for i in 0..8 {
-            x_bytes_be[i * 4..(i * 4) + 4].copy_from_slice(&res.0[i].to_le_bytes());
-        }
+        x_bytes_be[..32].copy_from_slice(&res.to_le_bytes()[..32]);
         x_bytes_be.reverse();
+
         let x_field = bits2field::<C>(&x_bytes_be);
         if x_field.is_err() {
             return false;
@@ -140,6 +135,7 @@ where
 }
 
 /// Convert bytes to bits. Used to convert the scalar values to little endian bits for the MSM.
+/// TODO: See if we can use bytemuck.
 fn bytes_to_bits(bytes: &[u8; 32]) -> [bool; 256] {
     let mut bits = [false; 256];
     for (i, &byte) in bytes.iter().enumerate() {
@@ -167,10 +163,10 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33]
         io::write(FD_ECRECOVER_HOOK, &buf);
     }
 
-    let recovered_bytes: [u8; 33] = io::read_vec().try_into().unwrap();
-    let s_inv_bytes: [u8; 32] = io::read_vec().try_into().unwrap();
+    let recovered_compressed_pubkey: [u8; 33] = io::read_vec().try_into().unwrap();
+    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
 
-    (recovered_bytes, s_inv_bytes)
+    (recovered_compressed_pubkey, s_inv_bytes_le)
 }
 
 /// Takes in a compressed public key and decompresses it using the SP1 syscall `syscall_secp256k1_decompress`.
@@ -179,7 +175,7 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33]
 /// and the remaining 32 bytes are the x coordinate of the decompressed pubkey.
 ///
 /// The decompressed public key is 65 bytes long, with 0x04 as the first byte,
-/// and the remaining 64 bytes being the x and y coordinates of the decompressed pubkey.
+/// and the remaining 64 bytes being the x and y coordinates of the decompressed pubkey in big-endian.
 ///
 /// More details on secp256k1 public key format can be found in the [Bitcoin wiki](https://en.bitcoin.it/wiki/Protocol_documentation#Signatures).
 ///
@@ -191,14 +187,14 @@ fn decompress_pubkey(compressed_pubkey: &[u8; 33]) -> Result<[u8; 65]> {
     let is_odd = match compressed_pubkey[0] {
         2 => false,
         3 => true,
-        _ => return Err(Error::new()),
+        _ => unreachable!("The first byte of the compressed public key must be 0x02 or 0x03."),
     };
     unsafe {
         syscall_secp256k1_decompress(&mut decompressed_key, is_odd);
     }
 
-    let mut result: [u8; 65] = [0; 65];
-    result[0] = 4;
-    result[1..].copy_from_slice(&decompressed_key);
-    Ok(result)
+    let mut uncompressed_pubkey: [u8; 65] = [0; 65];
+    uncompressed_pubkey[0] = 4;
+    uncompressed_pubkey[1..].copy_from_slice(&decompressed_key);
+    Ok(uncompressed_pubkey)
 }
