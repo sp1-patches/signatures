@@ -32,7 +32,6 @@ hex-literal = "0.4"
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 sp1-lib = { git = "https://github.com/succinctlabs/sp1.git", branch = "john/lib-refactor" }
 anyhow = "1.0"
-bit-vec = "0.8"
 
 [dev-dependencies]
 elliptic-curve = { version = "0.13", default-features = false, features = ["dev"] }
