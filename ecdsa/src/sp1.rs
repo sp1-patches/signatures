@@ -33,8 +33,7 @@ where
     /// signature over that prehashed message, and a [`RecoveryId`].
     ///
     /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
-    /// in the zkVM. After recovery, it verifies the signature against the recovered public key
-    /// to ensure correctness.
+    /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
     pub fn recover_from_prehash_secp256k1(
         prehash: &[u8],
         signature: &Signature<C>,
