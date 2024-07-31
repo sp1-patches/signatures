@@ -105,12 +105,10 @@ where
         let u1 = z * s_inverse;
         let u2 = *r * s_inverse;
 
-        // Convert u1 and u2 to little endian bits for the MSM.
-        let (mut u1_le_bytes, mut u2_le_bytes) = (u1.to_repr(), u2.to_repr());
-        u1_le_bytes.reverse();
-        u2_le_bytes.reverse();
-        let u1_le_bits = bytes_to_le_bits(u1_le_bytes.as_slice().try_into().unwrap());
-        let u2_le_bits = bytes_to_le_bits(u2_le_bytes.as_slice().try_into().unwrap());
+        // Convert u1 and u2 to "little-endian" bits (LSb first with little-endian byte order) for the MSM.
+        let (u1_be_bytes, u2_be_bytes) = (u1.to_repr(), u2.to_repr());
+        let u1_le_bits = be_bytes_to_le_bits(u1_be_bytes.as_slice().try_into().unwrap());
+        let u2_le_bits = be_bytes_to_le_bits(u2_be_bytes.as_slice().try_into().unwrap());
 
         // Compute the MSM.
         let res = Secp256k1AffinePoint::multi_scalar_multiplication(
@@ -134,12 +132,13 @@ where
     }
 }
 
-/// Convert bytes to LE bits. Used to convert the scalar values to little endian bits for the MSM.
-fn bytes_to_le_bits(bytes: &[u8; 32]) -> [bool; 256] {
+/// Convert big-endian bytes with the most significant bit first to little-endian bytes with the least significant bit first.
+fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
     let mut bits = [false; 256];
-    // Flip the bit order in each byte.
-    for (i, &byte) in bytes.iter().enumerate() {
+    // Reverse the byte order to little-endian.
+    for (i, &byte) in be_bytes.iter().rev().enumerate() {
         for j in 0..8 {
+            // Flip the bit order so the least significant bit is now the first bit of the chunk.
             bits[i * 8 + j] = ((byte >> j) & 1) == 1;
         }
     }
