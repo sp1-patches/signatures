@@ -135,15 +135,13 @@ where
 }
 
 /// Convert bytes to bits. Used to convert the scalar values to little endian bits for the MSM.
-/// TODO: See if we can use bytemuck.
 fn bytes_to_bits(bytes: &[u8; 32]) -> [bool; 256] {
-    let mut bits = [false; 256];
-    for (i, &byte) in bytes.iter().enumerate() {
-        for j in 0..8 {
-            bits[i * 8 + j] = ((byte >> j) & 1) == 1;
-        }
+    let bits = bit_vec::BitVec::from_bytes(bytes);
+    let mut bool_array = [false; 256];
+    for (i, bit) in bits.iter().enumerate() {
+        bool_array[i] = bit;
     }
-    bits
+    bool_array
 }
 
 /// Outside of the VM, computes the pubkey and s_inverse value from a signature and a message hash.
