@@ -32,24 +32,29 @@ where
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
     /// signature over that prehashed message, and a [`RecoveryId`].
     ///
-    /// This function is only enabled inside of SP1 programs, and accelerates the
-    /// recovery process using SP1 syscalls for secp256k1. Verifies the signature
-    /// is correct against the supplied pubkey.
+    /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
+    /// in the zkVM. After recovery, it verifies the signature against the recovered public key
+    /// to ensure correctness.
     pub fn recover_from_prehash_secp256k1(
         prehash: &[u8],
         signature: &Signature<C>,
         recovery_id: RecoveryId,
     ) -> Result<Self> {
-        // Recover the signature bytes and the recovery id from the signature.
+        // Recover the compressed public key and s_inverse value from the signature and prehashed message.
         let mut sig_bytes = [0u8; 65];
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
         sig_bytes[64] = recovery_id.to_byte();
         let (compressed_pubkey, s_inv) =
             recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap());
+
+        // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
 
+        // Transform the compressed public key into uncompressed form.
         let pubkey = decompress_pubkey(&compressed_pubkey)?;
 
+        // Verify the signature against the recovered public key. The last byte of the signature
+        // is the recovery id, which is not used in the verification process.
         let verified = Self::verify_signature_secp256k1(
             &pubkey,
             &prehash.try_into().unwrap(),
@@ -57,6 +62,7 @@ where
             &s_inverse,
         );
 
+        // If the signature is valid, return the public key.
         if verified {
             VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
         } else {
@@ -64,25 +70,6 @@ where
         }
     }
 
-    /// Convert a scalar to its little endian bit representation.
-    fn scalar_to_little_endian_bits<const NUM_BITS: usize>(scalar: &Scalar<C>) -> [bool; NUM_BITS] {
-        // Convert the scalar to its byte representation
-        let mut bytes = scalar.to_repr();
-        bytes.reverse();
-
-        // Create an array to hold the bits
-        let mut bits = [false; NUM_BITS];
-
-        // Iterate over each byte
-        for (byte_index, byte) in bytes.iter().enumerate() {
-            // Convert each byte to its bits in little endian order
-            for bit_index in 0..8 {
-                bits[byte_index * 8 + bit_index] = ((byte >> bit_index) & 1) == 1;
-            }
-        }
-
-        bits
-    }
 
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
@@ -123,9 +110,14 @@ where
         let u1 = z * s_inverse;
         let u2 = *r * s_inverse;
 
-        // Convert u1 and u2 to little endian bits for the MSM. Then, compute the MSM.
-        let u1_le_bits = Self::scalar_to_little_endian_bits::<256>(&u1);
-        let u2_le_bits = Self::scalar_to_little_endian_bits::<256>(&u2);
+        // Convert u1 and u2 to little endian bits for the MSM.
+        let (mut u1_le_bytes, mut u2_le_bytes) = (u1.to_repr(), u2.to_repr());
+        u1_le_bytes.reverse();
+        u2_le_bytes.reverse();
+        let u1_le_bits = bytes_to_bits(u1_le_bytes.as_slice().try_into().unwrap());
+        let u2_le_bits = bytes_to_bits(u2_le_bytes.as_slice().try_into().unwrap());
+
+        // Compute the MSM.
         let res = Secp256k1AffinePoint::multi_scalar_multiplication(
             &u1_le_bits,
             Secp256k1AffinePoint(Secp256k1AffinePoint::GENERATOR),
@@ -146,6 +138,17 @@ where
         }
         *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap()
     }
+}
+
+/// Convert bytes to bits. Used to convert the scalar values to little endian bits for the MSM.
+fn bytes_to_bits(bytes: &[u8; 32]) -> [bool; 256] {
+    let mut bits = [false; 256];
+    for (i, &byte) in bytes.iter().enumerate() {
+        for j in 0..8 {
+            bits[i * 8 + j] = ((byte >> j) & 1) == 1;
+        }
+    }
+    bits
 }
 
 /// Outside of the VM, computes the pubkey and s_inverse value from a signature and a message hash.
@@ -183,7 +186,7 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33]
 ///
 /// SAFETY: Our syscall will check that the x and y coordinates are within the
 /// secp256k1 scalar field.
-pub fn decompress_pubkey(compressed_pubkey: &[u8; 33]) -> Result<[u8; 65]> {
+fn decompress_pubkey(compressed_pubkey: &[u8; 33]) -> Result<[u8; 65]> {
     let mut decompressed_key: [u8; 64] = [0; 64];
     decompressed_key[..32].copy_from_slice(&compressed_pubkey[1..]);
     let is_odd = match compressed_pubkey[0] {
