@@ -832,7 +832,7 @@ dependencies = [
 [[package]]
 name = "sp1-lib"
 version = "2.0.0"
-source = "git+https://github.com/succinctlabs/sp1.git?branch=ratan/failing-secp-test#c81b194869d7963d4969212eeea6d1306862a3eb"
+source = "git+https://github.com/succinctlabs/sp1.git?branch=ratan/failing-secp-test#9075ef96bb68b6a44b37b4b2180dc438f5f704c8"
 dependencies = [
  "anyhow",
  "bincode",
