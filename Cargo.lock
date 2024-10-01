@@ -822,9 +822,8 @@ dependencies = [
 
 [[package]]
 name = "sp1-lib"
-version = "1.2.0-rc1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f600a97b145e66f0f5e56595527c359f5cc8cb1f9dc8a6da1ba34bb845c9d1e"
+version = "2.0.0"
+source = "git+https://github.com/succinctlabs/sp1.git?branch=ratan/impl-add-assign-fixes#8ee53dbb0381c7849a7675dfe9abd284c9d1e777"
 dependencies = [
  "anyhow",
  "bincode",
