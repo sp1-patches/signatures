@@ -119,48 +119,77 @@ where
         // Compute the MSM.
         match curve {
             Secp256Curve::K1 => {
-                let point = Secp256k1Point::multi_scalar_multiplication(
-                    &u1_le_bits,
-                    Secp256k1Point::new(Secp256k1Point::GENERATOR),
-                    &u2_le_bits,
-                    Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-                );
-                let p = point.unwrap();
+                // let point = Secp256k1Point::multi_scalar_multiplication(
+                //     &u1_le_bits,
+                //     Secp256k1Point::new(Secp256k1Point::GENERATOR),
+                //     &u2_le_bits,
+                //     Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                // );
+                // let p = point.unwrap();
 
-                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-                let mut x_bytes_be = [0u8; 32];
-                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
-                x_bytes_be.reverse();
+                // // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                // let mut x_bytes_be = [0u8; 32];
+                // x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                // x_bytes_be.reverse();
 
-                let x_field = bits2field::<C>(&x_bytes_be);
-                if x_field.is_err() {
-                    return false;
-                }
-                return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
+                // let x_field = bits2field::<C>(&x_bytes_be);
+                // if x_field.is_err() {
+                //     return false;
+                // }
+                // return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
+                return verify_signature_with_curve::<Secp256k1Point>(&u1_le_bits, &u2_le_bits, &pubkey_x_le_bytes, &pubkey_y_le_bytes, r);
 
             },
             Secp256Curve::R1 => {
-                let point = Secp256r1Point::multi_scalar_multiplication(
-                    &u1_le_bits,
-                    Secp256r1Point::new(Secp256r1Point::GENERATOR),
-                    &u2_le_bits,
-                    Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-                );
-                let p = point.unwrap();
+                // let point = Secp256r1Point::multi_scalar_multiplication(
+                //     &u1_le_bits,
+                //     Secp256r1Point::new(Secp256r1Point::GENERATOR),
+                //     &u2_le_bits,
+                //     Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                // );
+                // let p = point.unwrap();
 
-                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-                let mut x_bytes_be = [0u8; 32];
-                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
-                x_bytes_be.reverse();
+                // // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                // let mut x_bytes_be = [0u8; 32];
+                // x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                // x_bytes_be.reverse();
 
-                let x_field = bits2field::<C>(&x_bytes_be);
-                if x_field.is_err() {
-                    return false;
-                }
-                return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
+                // let x_field = bits2field::<C>(&x_bytes_be);
+                // if x_field.is_err() {
+                //     return false;
+                // }
+                // return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
+                return verify_signature_with_curve::<Secp256r1Point>(&u1_le_bits, &u2_le_bits, &pubkey_x_le_bytes, &pubkey_y_le_bytes, r);
             },
         };
     }
+}
+
+fn verify_signature_with_curve<P: CurveArithmetic>(
+    u1_le_bits: &[bool],
+    u2_le_bits: &[bool],
+    pubkey_x_le_bytes: &[u8],
+    pubkey_y_le_bytes: &[u8],
+    r: &Scalar<C>,
+) -> bool {
+    let point = P::multi_scalar_multiplication(
+        u1_le_bits,
+        P::new(P::GENERATOR),
+        u2_le_bits,
+        P::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+    );
+    let p = point.unwrap();
+
+    // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+    let mut x_bytes_be = [0u8; 32];
+    x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+    x_bytes_be.reverse();
+
+    let x_field = bits2field::<C>(&x_bytes_be);
+    if x_field.is_err() {
+        return false;
+    }
+    *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap()
 }
 
 /// Convert big-endian bytes with the most significant bit first to little-endian bytes with the least significant bit first.
