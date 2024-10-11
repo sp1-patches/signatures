@@ -21,6 +21,55 @@ pub enum Secp256Curve {
     R1, // secp256r1
 }
 
+impl<C> VerifyingKey<C>
+where
+    C: PrimeCurve + CurveArithmetic,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
+    /// signature over that prehashed message, and a [`RecoveryId`].
+    ///
+    /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
+    /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
+    pub fn recover_from_prehash_secp256_less_traits(
+        prehash: &[u8],
+        signature: &Signature<C>,
+        recovery_id: RecoveryId,
+        curve: Secp256Curve,
+    ) -> Result<> {
+        // Recover the compressed public key and s_inverse value from the signature and prehashed message.
+        let mut sig_bytes = [0u8; 65];
+        sig_bytes[..64].copy_from_slice(&signature.to_bytes());
+        sig_bytes[64] = recovery_id.to_byte();
+        let (compressed_pubkey, s_inv) =
+            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve);
+
+        // Convert the s_inverse bytes to a scalar.
+        let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
+
+        // Transform the compressed public key into uncompressed form.
+        let pubkey = decompress_pubkey(&compressed_pubkey, curve)?;
+
+        // Verify the signature against the recovered public key. The last byte of the signature
+        // is the recovery id, which is not used in the verification process.
+        let verified = Self::verify_signature_secp256(
+            &pubkey,
+            &prehash.try_into().unwrap(),
+            &signature,
+            &s_inverse,
+            curve,
+        );
+
+        // If the signature is valid, return the public key.
+        if verified {
+            Ok(())
+        } else {
+            Err(Error::new())
+        }
+    }
+
+}
+
 #[cfg(feature = "verifying")]
 impl<C> VerifyingKey<C>
 where
