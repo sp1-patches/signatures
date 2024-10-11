@@ -313,7 +313,9 @@ where
 
                 // Note: An additional check can be added to ensure the field bytes size is 32 bytes, but this is not neceessary.
                 if prehash.len() == 32 && curve.is_some() {
-                    return Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap());
+                    let pubkey = Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap());
+                    return VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
+                    // return Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap());
                 }
             }
         }

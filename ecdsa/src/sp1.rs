@@ -191,7 +191,7 @@ where
         signature: &Signature<C>,
         recovery_id: RecoveryId,
         curve: Secp256Curve,
-    ) -> Result<Self> {
+    ) -> Result<[u8; 65]> { //Result<Self>
         // Recover the compressed public key and s_inverse value from the signature and prehashed message.
         let mut sig_bytes = [0u8; 65];
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
@@ -217,7 +217,8 @@ where
 
         // If the signature is valid, return the public key.
         if verified {
-            VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
+            // VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
+            Ok(pubkey)
         } else {
             Err(Error::new())
         }
