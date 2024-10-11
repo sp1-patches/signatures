@@ -166,8 +166,7 @@ where
 impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C> + DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
+    AffinePoint<C>: VerifyPrimitive<C>,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
@@ -181,7 +180,7 @@ where
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-                return Self::recover_from_prehash(prehash, &sig, recid).map(|_| ()).map_err(|_| Error::new());
+                return recovery::<impl VerifyingKey<C>>::recover_from_prehash(prehash, &sig, recid).map(|_| ()).map_err(|_| Error::new());
             }
             
         }
