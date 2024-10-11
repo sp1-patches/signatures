@@ -177,8 +177,8 @@ where
 impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
+    // AffinePoint<C>: DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
+    // FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
