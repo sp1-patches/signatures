@@ -4,6 +4,7 @@ use crate::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
 };
+use crate::RecoveryId;
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
@@ -165,7 +166,8 @@ where
 impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>: VerifyPrimitive<C> + DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
@@ -179,7 +181,7 @@ where
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-                return Self::recover_from_prehash(prehash, sig, recid).map(|_| ()).map_err(|_| Error::new());
+                return Self::recover_from_prehash(prehash, &sig, recid).map(|_| ()).map_err(|_| Error::new());
             }
             
         }

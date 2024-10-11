@@ -16,7 +16,7 @@ use sp1_lib::{
 
 use crate::{hazmat::bits2field, Signature, SignatureSize, VerifyingKey};
 
-enum Secp256Curve {
+pub enum Secp256Curve {
     K1, // secp256k1
     R1, // secp256r1
 }
