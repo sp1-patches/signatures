@@ -131,7 +131,7 @@ where
                 let mut x_bytes_be = [0u8; 32];
                 x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
                 x_bytes_be.reverse();
-                return x_bytes_be;
+                x_bytes_be
 
                 // let x_field = bits2field::<C>(&x_bytes_be);
                 // if x_field.is_err() {
@@ -154,7 +154,7 @@ where
                 let mut x_bytes_be = [0u8; 32];
                 x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
                 x_bytes_be.reverse();
-                return x_bytes_be;
+                x_bytes_be
 
                 // let x_field = bits2field::<C>(&x_bytes_be);
                 // if x_field.is_err() {
