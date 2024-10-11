@@ -82,7 +82,6 @@ where
     ///
     /// This function is a modified version of [`crate::hazmat::verify_prehashed`] with
     /// changes implemented to support SP1 acceleration.
-
     pub fn verify_signature_secp256(
         pubkey: &[u8; 65],
         msg_hash: &[u8; 32],
@@ -157,33 +156,6 @@ where
         return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
     }
 }
-
-// fn verify_signature_with_curve<P: CurveArithmetic>(
-//     u1_le_bits: &[bool],
-//     u2_le_bits: &[bool],
-//     pubkey_x_le_bytes: &[u8],
-//     pubkey_y_le_bytes: &[u8],
-//     r: &Scalar<C>,
-// ) -> bool {
-//     let point = P::multi_scalar_multiplication(
-//         u1_le_bits,
-//         P::new(P::GENERATOR),
-//         u2_le_bits,
-//         P::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-//     );
-//     let p = point.unwrap();
-
-//     // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-//     let mut x_bytes_be = [0u8; 32];
-//     x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
-//     x_bytes_be.reverse();
-
-//     let x_field = bits2field::<C>(&x_bytes_be);
-//     if x_field.is_err() {
-//         return false;
-//     }
-//     *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap()
-// }
 
 /// Convert big-endian bytes with the most significant bit first to little-endian bytes with the least significant bit first.
 fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
