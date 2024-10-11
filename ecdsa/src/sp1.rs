@@ -34,7 +34,6 @@ where
     ///
     /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
     /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
-
     pub fn recover_from_prehash_secp256(
         prehash: &[u8],
         signature: &Signature<C>,
@@ -72,6 +71,7 @@ where
         }
     }
 
+
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
     /// Accepts the following arguments:
@@ -95,10 +95,6 @@ where
         pubkey_x_le_bytes.reverse();
         let mut pubkey_y_le_bytes = pubkey[33..].to_vec();
         pubkey_y_le_bytes.reverse();
-        let affine = match curve {
-            Secp256Curve::K1 => Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-            Secp256Curve::R1 => Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-        };
 
         // Split the signature into its two scalars.
         let (r, s) = signature.split_scalars();
@@ -127,13 +123,13 @@ where
                 &u1_le_bits,
                 Secp256k1Point::new(Secp256k1Point::GENERATOR),
                 &u2_le_bits,
-                affine,
+                Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
             ),
             Secp256Curve::R1 => Secp256r1Point::multi_scalar_multiplication(
                 &u1_le_bits,
                 Secp256r1Point::new(Secp256r1Point::GENERATOR),
                 &u2_le_bits,
-                affine,
+                Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
             ),
         }
         .unwrap();
@@ -198,10 +194,11 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp2
 /// The decompressed public key is 65 bytes long, with 0x04 as the first byte,
 /// and the remaining 64 bytes being the x and y coordinates of the decompressed pubkey in big-endian.
 ///
-/// More details on secp256k1/r1 public key format can be found in the [Bitcoin wiki](https://en.bitcoin.it/wiki/Protocol_documentation#Signatures).
+/// More details on secp256k1 public key format can be found in the [Bitcoin wiki](https://en.bitcoin.it/wiki/Protocol_documentation#Signatures).
+/// More details on secp256r1 public key format can be found [here](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154986/SECP256R1+Support).
 ///
 /// SAFETY: Our syscall will check that the x and y coordinates are within the
-/// secp256k1/r1 scalar field.
+/// secp256k1/secp256r1 scalar field.
 fn decompress_pubkey(compressed_pubkey: &[u8; 33], curve: Secp256Curve) -> Result<[u8; 65]> {
     let mut decompressed_key: [u8; 64] = [0; 64];
     decompressed_key[..32].copy_from_slice(&compressed_pubkey[1..]);

@@ -48,6 +48,14 @@ use {
 #[cfg(all(feature = "pem", feature = "serde"))]
 use serdect::serde::{de, ser, Deserialize, Serialize};
 
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        use digest::generic_array::GenericArray;
+        use elliptic_curve::Curve;
+        use crate::sp1::Secp256Curve;
+    }
+}
+
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
 ///
@@ -161,6 +169,20 @@ where
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                let mut sig = signature.clone();
+                let mut recid = 0u8;
+                if let Some(sig_normalized) = sig.normalize_s() {
+                    sig = sig_normalized;
+                    recid ^= 1;
+                }
+                let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
+
+                return Self::recover_from_prehash(prehash, sig, recid).map(|_| ()).map_err(|_| Error::new());
+            }
+            
+        }
         let field = bits2field::<C>(prehash)?;
         self.inner.as_affine().verify_prehashed(&field, signature)
     }
