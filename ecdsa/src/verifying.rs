@@ -8,7 +8,7 @@ use crate::RecoveryId;
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
-    point::PointCompression,
+    point::{PointCompression, DecompressPoint},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
 };
@@ -182,7 +182,7 @@ where
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-                return recovery::<impl VerifyingKey<C>>::recover_from_prehash(prehash, &sig, recid).map(|_| ()).map_err(|_| Error::new());
+                return Self::recover_from_prehash(prehash, &sig, recid).map(|_| ()).map_err(|_| Error::new());
             }
             
         }
