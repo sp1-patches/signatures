@@ -180,7 +180,9 @@ where
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-                return Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1).map(|_| ()).map_err(|_| Error::new());
+                // return Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1).map(|_| ()).map_err(|_| Error::new());
+                Self::recover_from_prehash(prehash, sig, recid)?;
+                return Ok(());
             }
             
         }

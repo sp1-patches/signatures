@@ -132,14 +132,6 @@ where
                 x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
                 x_bytes_be.reverse();
                 x_bytes_be
-
-                // let x_field = bits2field::<C>(&x_bytes_be);
-                // if x_field.is_err() {
-                //     return false;
-                // }
-                // return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
-                // return verify_signature_with_curve::<Secp256k1Point>(&u1_le_bits, &u2_le_bits, &pubkey_x_le_bytes, &pubkey_y_le_bytes, r);
-
             },
             Secp256Curve::R1 => {
                 let point = Secp256r1Point::multi_scalar_multiplication(
@@ -155,13 +147,6 @@ where
                 x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
                 x_bytes_be.reverse();
                 x_bytes_be
-
-                // let x_field = bits2field::<C>(&x_bytes_be);
-                // if x_field.is_err() {
-                //     return false;
-                // }
-                // return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
-                // return verify_signature_with_curve::<Secp256r1Point>(&u1_le_bits, &u2_le_bits, &pubkey_x_le_bytes, &pubkey_y_le_bytes, r);
             },
         };
 
