@@ -315,7 +315,6 @@ where
                 if prehash.len() == 32 && curve.is_some() {
                     let pubkey = Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap())?;
                     return VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
-                    // return Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap());
                 }
             }
         }

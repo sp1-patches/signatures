@@ -22,163 +22,10 @@ pub enum Secp256Curve {
     R1, // secp256r1
 }
 
-impl<C> VerifyingKey<C>
-where
-    C: PrimeCurve + CurveArithmetic,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
-    /// signature over that prehashed message, and a [`RecoveryId`].
-    ///
-    /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
-    /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
-    pub fn recover_from_prehash_secp256_less_traits(
-        prehash: &[u8],
-        signature: &Signature<C>,
-        recovery_id: RecoveryId,
-        curve: Secp256Curve,
-    ) -> Result<()> {
-        // Recover the compressed public key and s_inverse value from the signature and prehashed message.
-        let mut sig_bytes = [0u8; 65];
-        sig_bytes[..64].copy_from_slice(&signature.to_bytes());
-        sig_bytes[64] = recovery_id.to_byte();
-        let (compressed_pubkey, s_inv) =
-            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve);
-
-        // Convert the s_inverse bytes to a scalar.
-        let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
-
-        // Transform the compressed public key into uncompressed form.
-        let pubkey = decompress_pubkey(&compressed_pubkey, curve)?;
-
-        // Verify the signature against the recovered public key. The last byte of the signature
-        // is the recovery id, which is not used in the verification process.
-        let verified = Self::verify_signature_secp256_less_traits(
-            &pubkey,
-            &prehash.try_into().unwrap(),
-            &signature,
-            &s_inverse,
-            curve,
-        );
-
-        // If the signature is valid, return the public key.
-        if verified {
-            Ok(())
-        } else {
-            Err(Error::new())
-        }
-    }
-
-    /// Verify the prehashed message against the provided ECDSA signature.
-    ///
-    /// Accepts the following arguments:
-    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
-    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
-    /// - `msg_hash`: The prehashed message to verify the signature against.
-    /// - `signature`: The signature to verify.
-    /// - `s_inverse`: The inverse of the scalar `s` in the signature.
-    ///
-    /// This function is a modified version of [`crate::hazmat::verify_prehashed`] with
-    /// changes implemented to support SP1 acceleration.
-
-    pub fn verify_signature_secp256_less_traits(
-        pubkey: &[u8; 65],
-        msg_hash: &[u8; 32],
-        signature: &Signature<C>,
-        s_inverse: &Scalar<C>,
-        curve: Secp256Curve,
-    ) -> bool {
-        let mut pubkey_x_le_bytes = pubkey[1..33].to_vec();
-        pubkey_x_le_bytes.reverse();
-        let mut pubkey_y_le_bytes = pubkey[33..].to_vec();
-        pubkey_y_le_bytes.reverse();
-
-        // Split the signature into its two scalars.
-        let (r, s) = signature.split_scalars();
-        assert_eq!(*s_inverse * s.as_ref(), Scalar::<C>::ONE);
-
-        // Convert the message hash into a scalar.
-        let field = bits2field::<C>(msg_hash);
-        if field.is_err() {
-            return false;
-        }
-        let field: Scalar<C> = Scalar::<C>::from_repr(field.unwrap()).unwrap();
-        let z = field;
-
-        // Compute the two scalars.
-        let u1 = z * s_inverse;
-        let u2 = *r * s_inverse;
-
-        // Convert u1 and u2 to "little-endian" bits (LSb first with little-endian byte order) for the MSM.
-        let (u1_be_bytes, u2_be_bytes) = (u1.to_repr(), u2.to_repr());
-        let u1_le_bits = be_bytes_to_le_bits(u1_be_bytes.as_slice().try_into().unwrap());
-        let u2_le_bits = be_bytes_to_le_bits(u2_be_bytes.as_slice().try_into().unwrap());
-
-        // Compute the MSM.
-        match curve {
-            Secp256Curve::K1 => {
-                let point = Secp256k1Point::multi_scalar_multiplication(
-                    &u1_le_bits,
-                    Secp256k1Point::new(Secp256k1Point::GENERATOR),
-                    &u2_le_bits,
-                    Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-                );
-                let p = point.unwrap();
-
-                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-                let mut x_bytes_be = [0u8; 32];
-                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
-                x_bytes_be.reverse();
-
-                let x_field = bits2field::<C>(&x_bytes_be);
-                if x_field.is_err() {
-                    return false;
-                }
-                return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
-
-            },
-            Secp256Curve::R1 => {
-                let point = Secp256r1Point::multi_scalar_multiplication(
-                    &u1_le_bits,
-                    Secp256r1Point::new(Secp256r1Point::GENERATOR),
-                    &u2_le_bits,
-                    Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-                );
-                let p = point.unwrap();
-
-                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-                let mut x_bytes_be = [0u8; 32];
-                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
-                x_bytes_be.reverse();
-
-                let x_field = bits2field::<C>(&x_bytes_be);
-                if x_field.is_err() {
-                    return false;
-                }
-                return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
-            },
-        };
-
-        // // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-        // let mut x_bytes_be = [0u8; 32];
-        // x_bytes_be[..32].copy_from_slice(&res.to_le_bytes()[..32]);
-        // x_bytes_be.reverse();
-
-        // let x_field = bits2field::<C>(&x_bytes_be);
-        // if x_field.is_err() {
-        //     return false;
-        // }
-        // *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap()
-    }
-
-}
-
 #[cfg(feature = "verifying")]
 impl<C> VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    // AffinePoint<C>: DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
-    // FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
@@ -217,7 +64,6 @@ where
 
         // If the signature is valid, return the public key.
         if verified {
-            // VerifyingKey::from_sec1_bytes(&pubkey).map_err(|_| Error::new())
             Ok(pubkey)
         } else {
             Err(Error::new())
