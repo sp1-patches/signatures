@@ -39,7 +39,7 @@ elliptic-curve = { version = "0.13", default-features = false, features = ["dev"
 sha2 = { version = "0.10", default-features = false }
 
 [features]
-default = ["digest"]
+default = ["std","digest"]
 alloc = ["elliptic-curve/alloc", "signature/alloc", "spki/alloc"]
 std = ["alloc", "elliptic-curve/std", "signature/std"]
 
