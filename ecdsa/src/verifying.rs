@@ -57,6 +57,9 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(feature = "std")]
+use std::println;
+
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
 ///
@@ -172,6 +175,7 @@ where
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
         cfg_if::cfg_if! {
             if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                println!("cycle-tracker-report-start: normalize_s");
                 let mut sig = signature.clone();
                 let mut recid = 0u8;
                 if let Some(sig_normalized) = sig.normalize_s() {
@@ -179,6 +183,7 @@ where
                     recid ^= 1;
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
+                println!("cycle-tracker-report-end: normalize_s");
 
                 Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
                 return Ok(());
