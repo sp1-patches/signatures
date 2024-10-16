@@ -57,7 +57,6 @@ cfg_if::cfg_if! {
     }
 }
 
-
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
 ///
@@ -173,6 +172,8 @@ where
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
         cfg_if::cfg_if! {
             if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                // Provides signature, recovery id, and prehash to call recover_from_prehash_secp256 (our generic recover function for secp256k1 and secp256r1)
+                // which passes iff verify_signature_secp256k1 returns true
                 let mut sig = signature.clone();
                 let mut recid = 0u8;
                 if let Some(sig_normalized) = sig.normalize_s() {

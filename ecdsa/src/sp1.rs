@@ -31,14 +31,15 @@ where
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
     /// signature over that prehashed message, and a [`RecoveryId`].
     ///
-    /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
+    /// This function leverages SP1 syscalls for secp256k1 and secp256r1 to accelerate public key recovery
     /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
+    /// If the signature is valid, returns the public key in uncompressed form (big-endian).
     pub fn recover_from_prehash_secp256(
         prehash: &[u8],
         signature: &Signature<C>,
         recovery_id: RecoveryId,
         curve: Secp256Curve,
-    ) -> Result<[u8; 65]> { //Result<Self>
+    ) -> Result<[u8; 65]> { 
         // Recover the compressed public key and s_inverse value from the signature and prehashed message.
         let mut sig_bytes = [0u8; 65];
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
