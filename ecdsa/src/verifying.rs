@@ -4,10 +4,11 @@ use crate::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
 };
+use crate::RecoveryId;
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
-    point::PointCompression,
+    point::{PointCompression, DecompressPoint},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
 };
@@ -47,6 +48,14 @@ use {
 
 #[cfg(all(feature = "pem", feature = "serde"))]
 use serdect::serde::{de, ser, Deserialize, Serialize};
+
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        use digest::generic_array::GenericArray;
+        use elliptic_curve::Curve;
+        use crate::sp1::Secp256Curve;
+    }
+}
 
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
@@ -161,6 +170,23 @@ where
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                // Provides signature, recovery id, and prehash to call recover_from_prehash_secp256 (our generic recover function for secp256k1 and secp256r1)
+                // which passes iff verify_signature_secp256k1 returns true
+                let mut sig = signature.clone();
+                let mut recid = 0u8;
+                if let Some(sig_normalized) = sig.normalize_s() {
+                    sig = sig_normalized;
+                    recid ^= 1;
+                }
+                let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
+
+                Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
+                return Ok(());
+            }
+            
+        }
         let field = bits2field::<C>(prehash)?;
         self.inner.as_affine().verify_prehashed(&field, signature)
     }
