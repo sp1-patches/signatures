@@ -54,9 +54,6 @@ cfg_if::cfg_if! {
         use digest::generic_array::GenericArray;
         use elliptic_curve::Curve;
         use crate::sp1::Secp256Curve;
-
-        #[cfg(feature = "std")]
-        use std::println;
     }
 }
 
