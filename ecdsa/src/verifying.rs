@@ -202,7 +202,7 @@ where
                     None
                 };
 
-                Self::recover_from_prehash_secp256(prehash, &sig, recid, curve)?;
+                Self::recover_from_prehash_secp256(prehash, &sig, recid, curve.unwrap())?;
                 return Ok(());
             }
             
