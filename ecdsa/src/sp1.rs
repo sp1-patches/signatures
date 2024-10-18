@@ -79,16 +79,16 @@ where
     /// - `msg_hash`: The prehashed message to verify the signature against.
     /// - `signature`: The signature to verify.
     /// - `curve`: The curve to verify the signature against.
-    pub fn verify_prehash_secp256(
-        pubkey: &[u8; 65],
-        prehash: &[u8],
-        signature: &Signature<C>,
-        curve: Secp256Curve,
-    ) -> Result<()> {
-        let (r, s) = signature.split_scalars();
-        let s_inv = *s.invert_vartime();
-        return verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
-    }
+    // pub fn verify_prehash_secp256(
+    //     pubkey: &[u8; 65],
+    //     prehash: &[u8],
+    //     signature: &Signature<C>,
+    //     curve: Secp256Curve,
+    // ) -> Result<()> {
+    //     let (r, s) = signature.split_scalars();
+    //     let s_inv = *s.invert_vartime();
+    //     return verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+    // }
 
 
     /// Verify the prehashed message against the provided ECDSA signature.
