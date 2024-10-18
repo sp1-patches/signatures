@@ -71,6 +71,25 @@ where
         }
     }
 
+    /// Verify the prehashed message against the provided ECDSA signature using SP1 acceleration.
+    /// (essentially the same as verify_signature_secp256, but only takes in signature and finds inverse of s)
+    /// Accepts the following arguments:
+    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
+    /// - `msg_hash`: The prehashed message to verify the signature against.
+    /// - `signature`: The signature to verify.
+    /// - `curve`: The curve to verify the signature against.
+    pub fn verify_prehash_secp256(
+        pubkey: &[u8; 65],
+        prehash: &[u8],
+        signature: &Signature<C>,
+        curve: Secp256Curve,
+    ) -> Result<()> {
+        let (r, s) = signature.split_scalars();
+        let s_inv = *s.invert_vartime();
+        return verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+    }
+
 
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
