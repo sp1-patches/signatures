@@ -189,20 +189,20 @@ where
                 }
                 let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-                // Reference: https://en.bitcoin.it/wiki/Secp256k1.
-                const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-                // Reference: https://neuromancer.sk/std/secg/secp256r1.
-                const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+                // // Reference: https://en.bitcoin.it/wiki/Secp256k1.
+                // const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+                // // Reference: https://neuromancer.sk/std/secg/secp256r1.
+                // const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
 
-                let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
-                    Some(Secp256Curve::K1)
-                } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
-                    Some(Secp256Curve::R1)
-                } else {
-                    None
-                };
+                // let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
+                //     Some(Secp256Curve::K1)
+                // } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
+                //     Some(Secp256Curve::R1)
+                // } else {
+                //     None
+                // };
 
-                Self::recover_from_prehash_secp256(prehash, &sig, recid, curve.unwrap())?;
+                Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
                 return Ok(());
             }
             
