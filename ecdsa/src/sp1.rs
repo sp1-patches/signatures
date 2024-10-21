@@ -81,7 +81,7 @@ where
     /// - `signature`: The signature to verify.
     /// - `curve`: The curve to verify the signature against.
     pub fn verify_prehash_secp256(
-        pubkey: &[u8; 65],
+        pubkey: &[u8; 33],
         prehash: &[u8],
         signature: &Signature<C>,
         curve: Secp256Curve,
