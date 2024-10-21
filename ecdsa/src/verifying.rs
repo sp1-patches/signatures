@@ -208,7 +208,7 @@ cfg_if::cfg_if! {
                             // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
                             // return Ok(());
 
-                            let point = self.inner.to_encoded_point(true);
+                            let point = self.inner.to_encoded_point(false);
                             let pubkey = point.as_bytes();
                             let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
                             Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;

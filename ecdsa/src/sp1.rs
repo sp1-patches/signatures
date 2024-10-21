@@ -88,7 +88,7 @@ where
     ) -> Result<()> {
         let (r, s) = signature.split_scalars();
         let s_inv = *s.invert_vartime();
-        let decompressed_pubkey = decompress_pubkey(&pubkey, curve)?;
+        let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;
         let verified = Self::verify_signature_secp256(&decompressed_pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
         if verified {
             Ok(())
