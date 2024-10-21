@@ -151,38 +151,6 @@ where
 // `*Verifier` trait impls
 //
 
-// cfg_if::cfg_if! {   
-//     if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-//         impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
-//         where
-//             C: PrimeCurve + CurveArithmetic,
-//             D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-//             AffinePoint<C>:
-//                 DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
-//             FieldBytesSize<C>: sec1::ModulusSize,
-//             SignatureSize<C>: ArrayLength<u8>,
-//         {
-//             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-//                 PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
-//                 return Ok(());
-//             }
-//         }
-//     }
-//     else {
-//         impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
-//         where
-//             C: PrimeCurve + CurveArithmetic,
-//             D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-//             AffinePoint<C>: VerifyPrimitive<C>,
-//             SignatureSize<C>: ArrayLength<u8>,
-//         {
-//             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-//                 self.inner.as_affine().verify_digest(msg_digest, signature)
-//             }
-//         }
-//     }
-// }
-
 impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
@@ -204,60 +172,42 @@ where
 }
 
 
-cfg_if::cfg_if! {
-    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-        impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
-            where
-                C: PrimeCurve + CurveArithmetic,
-                AffinePoint<C>:
-                    DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
-                FieldBytesSize<C>: sec1::ModulusSize,
-                SignatureSize<C>: ArrayLength<u8>,
-            {
-                fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
-                    cfg_if::cfg_if! {
-                        if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-                            // Reference: https://en.bitcoin.it/wiki/Secp256k1.
-                            const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-                            // Reference: https://neuromancer.sk/std/secg/secp256r1.
-                            const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
+    where
+        C: PrimeCurve + CurveArithmetic,
+        AffinePoint<C>:
+            DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+        FieldBytesSize<C>: sec1::ModulusSize,
+        SignatureSize<C>: ArrayLength<u8>,
+    {
+        fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+            cfg_if::cfg_if! {
+                if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                    // Reference: https://en.bitcoin.it/wiki/Secp256k1.
+                    const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+                    // Reference: https://neuromancer.sk/std/secg/secp256r1.
+                    const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
 
-                            let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
-                                Some(Secp256Curve::K1)
-                            } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
-                                Some(Secp256Curve::R1)
-                            } else {
-                                None
-                            };
-                            let point = self.inner.to_encoded_point(false);
-                            let pubkey = point.as_bytes();
-                            let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
-                            Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
-                            return Ok(());
-                        }
-                        
-                    }
-                    let field = bits2field::<C>(prehash)?;
-                    self.inner.as_affine().verify_prehashed(&field, signature)
+                    let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
+                        Some(Secp256Curve::K1)
+                    } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
+                        Some(Secp256Curve::R1)
+                    } else {
+                        None
+                    };
+                    let point = self.inner.to_encoded_point(false);
+                    let pubkey = point.as_bytes();
+                    let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
+                    Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
+                    return Ok(());
                 }
-        }
-    }
-    else {
-        impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
-            where
-                C: PrimeCurve + CurveArithmetic,
-                AffinePoint<C>: VerifyPrimitive<C>,
-                SignatureSize<C>: ArrayLength<u8>,
-            {
-                fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
-                    let field = bits2field::<C>(prehash)?;
-                    self.inner.as_affine().verify_prehashed(&field, signature)
-                }
+                
             }
-
-    }
+            let field = bits2field::<C>(prehash)?;
+            self.inner.as_affine().verify_prehashed(&field, signature)
+        }
 }
-
+   
 
 impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
