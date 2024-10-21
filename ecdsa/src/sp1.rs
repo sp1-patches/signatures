@@ -92,7 +92,6 @@ where
         
         // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
-        // let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;
         let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inverse, curve);
         if verified {
             Ok(())
@@ -227,6 +226,11 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp2
     (recovered_compressed_pubkey, s_inv_bytes_le)
 }
 
+/// Outside of the VM, computes the s_inverse value from a signature.
+///
+/// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
+/// [`VerifyingKey::recover_from_prehash_secp256`] to securely recover the public key associated with
+/// a signature and message hash.
 fn recover_s_inv_unconstrained(sig: &[u8;64]) -> [u8; 32] {
     unconstrained! {
         io::write(R1_ECRECOVER_HOOK, sig);
