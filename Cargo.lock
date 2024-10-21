@@ -657,13 +657,11 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "sp1-lib"
-version = "1.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de4c2cc40e1019faac8cdbe61172c7be09960cfe240c712be46df3795c53fce8"
+checksum = "9c372b16988e765af85ccf958b18b26d89c05886f2592d313a285415dcc769cb"
 dependencies = [
- "anyhow",
  "bincode",
- "cfg-if",
  "serde",
 ]
 
