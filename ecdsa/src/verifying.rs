@@ -187,16 +187,18 @@ impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-        // cfg_if::cfg_if! {
-        //     if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-        //         PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
-        //         return Ok(());
-        //     }
-        // }
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
+                return Ok(());
+            }
+        }
         self.inner.as_affine().verify_digest(msg_digest, signature)
     }
 }
@@ -260,7 +262,9 @@ cfg_if::cfg_if! {
 impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
@@ -293,7 +297,9 @@ impl<C, D> DigestVerifier<D, der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
