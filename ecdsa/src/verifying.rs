@@ -1,4 +1,10 @@
 //! ECDSA verifying: checking signatures are authentic using a [`VerifyingKey`].
+//!
+//! # ⚠️ Warning: our patching can cause issues for users who want to use VerifyingKey on curves that don't 
+//!  implement the traits: 
+//!     AffinePoint<C>:
+//!     DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
+//!     FieldBytesSize<C>: sec1::ModulusSize,
 
 use crate::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
