@@ -191,19 +191,15 @@ impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
             DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
         FieldBytesSize<C>: sec1::ModulusSize,
         SignatureSize<C>: ArrayLength<u8>,
-{   
-    cfg_if::cfg_if! {
-        if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-            fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+{
+    fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
                 PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
                 return Ok(());
             }
         }
-        else {
-            fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-                self.inner.as_affine().verify_digest(msg_digest, signature)
-            }
-        }
+        self.inner.as_affine().verify_digest(msg_digest, signature)
     }
 }
 
