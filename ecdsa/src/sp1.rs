@@ -88,9 +88,8 @@ where
     ) -> Result<()> {
         let mut sig_bytes = [0u8; 64];
         sig_bytes.copy_from_slice(&signature.to_bytes());
-        let s_inv =
-            recover_s_inv_unconstrained(&sig_bytes);
-
+        let s_inv = recover_s_inv_unconstrained(&sig_bytes);
+        
         // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
         // let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;

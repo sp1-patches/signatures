@@ -159,13 +159,13 @@ where
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-        // cfg_if::cfg_if! {
-        //     if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-        //         self.verify_prehash(&msg_digest.finalize_fixed(), signature)?;
-        //         return Ok(());
-        //     }
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                self.verify_prehash(&msg_digest.finalize_fixed(), signature)?;
+                return Ok(());
+            }
             
-        // }
+        }
         self.inner.as_affine().verify_digest(msg_digest, signature)
     }
 }
@@ -183,16 +183,6 @@ cfg_if::cfg_if! {
                 fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
                     cfg_if::cfg_if! {
                         if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-                            // Provides signature, recovery id, and prehash to call recover_from_prehash_secp256 (our generic recover function for secp256k1 and secp256r1)
-                            // which passes iff verify_signature_secp256k1 returns true
-                            // let mut sig = signature.clone();
-                            // let mut recid = 0u8;
-                            // if let Some(sig_normalized) = sig.normalize_s() {
-                            //     sig = sig_normalized;
-                            //     recid ^= 1;
-                            // }
-                            // let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
-                            // let recid = RecoveryId::trial_recovery_from_prehash(self, prehash, &sig).unwrap();
                             // Reference: https://en.bitcoin.it/wiki/Secp256k1.
                             const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
                             // Reference: https://neuromancer.sk/std/secg/secp256r1.
@@ -205,16 +195,10 @@ cfg_if::cfg_if! {
                             } else {
                                 None
                             };
-                            // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
-                            // return Ok(());
-                            println!("cycle-tracker-start: to_encoded_point");
                             let point = self.inner.to_encoded_point(false);
-                            println!("cycle-tracker-end: to_encoded_point");
                             let pubkey = point.as_bytes();
                             let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
-                            println!("cycle-tracker-start: verify_prehash_secp256");
                             Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
-                            println!("cycle-tracker-end: verify_prehash_secp256");
                             return Ok(());
                         }
                         
