@@ -81,15 +81,15 @@ where
     /// - `signature`: The signature to verify.
     /// - `curve`: The curve to verify the signature against.
     pub fn verify_prehash_secp256(
-        pubkey: &[u8; 33],
+        pubkey: &[u8; 65],
         prehash: &[u8],
         signature: &Signature<C>,
         curve: Secp256Curve,
     ) -> Result<()> {
         let (r, s) = signature.split_scalars();
         let s_inv = *s.invert_vartime();
-        let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;
-        let verified = Self::verify_signature_secp256(&decompressed_pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+        // let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;
+        let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
         if verified {
             Ok(())
         } else {
