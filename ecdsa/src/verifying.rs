@@ -209,7 +209,7 @@ cfg_if::cfg_if! {
                             // return Ok(());
 
                             let pubkey = self.inner.to_encoded_point(true).as_bytes();
-                            Self::verify_prehash_secp256(&pubkey, prehash, signature, curve)?;
+                            Self::verify_prehash_secp256(pubkey, prehash, signature, curve)?;
                             return Ok(());
                         }
                         
