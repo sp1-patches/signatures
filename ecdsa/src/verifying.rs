@@ -151,31 +151,55 @@ where
 // `*Verifier` trait impls
 //
 
-cfg_if::cfg_if! {   
-    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-        impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
-        where
-            C: PrimeCurve + CurveArithmetic,
-            D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-            AffinePoint<C>:
-                DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
-            FieldBytesSize<C>: sec1::ModulusSize,
-            SignatureSize<C>: ArrayLength<u8>,
-        {
+// cfg_if::cfg_if! {   
+//     if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+//         impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
+//         where
+//             C: PrimeCurve + CurveArithmetic,
+//             D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
+//             AffinePoint<C>:
+//                 DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+//             FieldBytesSize<C>: sec1::ModulusSize,
+//             SignatureSize<C>: ArrayLength<u8>,
+//         {
+//             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+//                 PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
+//                 return Ok(());
+//             }
+//         }
+//     }
+//     else {
+//         impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
+//         where
+//             C: PrimeCurve + CurveArithmetic,
+//             D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
+//             AffinePoint<C>: VerifyPrimitive<C>,
+//             SignatureSize<C>: ArrayLength<u8>,
+//         {
+//             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+//                 self.inner.as_affine().verify_digest(msg_digest, signature)
+//             }
+//         }
+//     }
+// }
+
+impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
+    where
+        C: PrimeCurve + CurveArithmetic,
+        D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
+        AffinePoint<C>:
+            DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+        FieldBytesSize<C>: sec1::ModulusSize,
+        SignatureSize<C>: ArrayLength<u8>,
+{   
+    cfg_if::cfg_if! {
+        if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
                 PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
                 return Ok(());
             }
         }
-    }
-    else {
-        impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
-        where
-            C: PrimeCurve + CurveArithmetic,
-            D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-            AffinePoint<C>: VerifyPrimitive<C>,
-            SignatureSize<C>: ArrayLength<u8>,
-        {
+        else {
             fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
                 self.inner.as_affine().verify_digest(msg_digest, signature)
             }
