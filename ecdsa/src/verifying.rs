@@ -207,11 +207,14 @@ cfg_if::cfg_if! {
                             };
                             // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
                             // return Ok(());
-
+                            println!("cycle-tracker-start: to_encoded_point");
                             let point = self.inner.to_encoded_point(false);
+                            println!("cycle-tracker-end: to_encoded_point");
                             let pubkey = point.as_bytes();
                             let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
+                            println!("cycle-tracker-start: verify_prehash_secp256");
                             Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
+                            println!("cycle-tracker-end: verify_prehash_secp256");
                             return Ok(());
                         }
                         
