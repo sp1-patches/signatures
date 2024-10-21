@@ -86,11 +86,9 @@ where
         signature: &Signature<C>,
         curve: Secp256Curve,
     ) -> Result<()> {
-        let mut sig_bytes = [0u8; 65];
-        sig_bytes[..64].copy_from_slice(&signature.to_bytes());
-        sig_bytes[64] = 0u8;
-        let (_, s_inv) =
-            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve);
+
+        let s_inv =
+            recover_s_inv_unconstrained(&signature.to_bytes());
 
         // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
@@ -227,6 +225,14 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp2
     let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
 
     (recovered_compressed_pubkey, s_inv_bytes_le)
+}
+
+fn recover_s_inv_unconstrained(sig: &[u8;64]) -> [u8; 32] {
+    unconstrained! {
+        io::write(K1_ECRECOVER_HOOK, sig);
+    }
+    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
+    s_inv_bytes_le
 }
 
 /// Takes in a compressed public key and decompresses it using the SP1 syscall `syscall_secp256k1_decompress`.
