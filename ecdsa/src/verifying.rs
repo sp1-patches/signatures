@@ -8,6 +8,7 @@ use crate::RecoveryId;
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
+    ops::Invert,
     point::{PointCompression, DecompressPoint},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey, FieldBytesEncoding,
@@ -208,9 +209,9 @@ cfg_if::cfg_if! {
                             // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
                             // return Ok(());
 
-                            let pubkey = self.inner.to_encoded_point(true).as_bytes();
-                            let pubkey_array: &[u8; 65] = pubkey.try_into().map_err(|_| Error::new()).unwrap();
-                            Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve)?;
+                            let pubkey = self.inner.to_encoded_point(false).as_bytes();
+                            let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
+                            Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
                             return Ok(());
                         }
                         
