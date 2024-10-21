@@ -251,7 +251,9 @@ where
 impl<C> Verifier<SignatureWithOid<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], sig: &SignatureWithOid<C>) -> Result<()> {
@@ -285,7 +287,9 @@ where
 impl<C> PrehashVerifier<der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
