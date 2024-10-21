@@ -161,7 +161,7 @@ where
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
         cfg_if::cfg_if! {
             if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-                Self::verify_prehash(&msg_digest.finalize_fixed(), signature)?;
+                Self::verify_prehash(self,&msg_digest.finalize_fixed(), signature)?;
                 return Ok(());
             }
             
