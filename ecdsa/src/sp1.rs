@@ -88,7 +88,7 @@ where
     ) -> Result<()> {
         let mut sig_bytes = [0u8; 65];
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
-        sig_bytes[64] = recovery_id.to_byte();
+        sig_bytes[64] = 0u8;
         let (_, s_inv) =
             recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve);
 
