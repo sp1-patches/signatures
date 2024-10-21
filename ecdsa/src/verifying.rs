@@ -173,7 +173,9 @@ where
 impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
