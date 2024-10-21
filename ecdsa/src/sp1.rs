@@ -87,7 +87,7 @@ where
     ) -> Result<()> {
         let (r, s) = signature.split_scalars();
         let s_inv = *s.invert_vartime();
-        return verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+        return Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
     }
 
 

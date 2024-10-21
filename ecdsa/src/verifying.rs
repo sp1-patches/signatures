@@ -170,50 +170,71 @@ where
     }
 }
 
-impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
-where
-    C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C>,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
-        cfg_if::cfg_if! {
-            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-                // Provides signature, recovery id, and prehash to call recover_from_prehash_secp256 (our generic recover function for secp256k1 and secp256r1)
-                // which passes iff verify_signature_secp256k1 returns true
-                // let mut sig = signature.clone();
-                // let mut recid = 0u8;
-                // if let Some(sig_normalized) = sig.normalize_s() {
-                //     sig = sig_normalized;
-                //     recid ^= 1;
-                // }
-                // let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
-                // let recid = RecoveryId::trial_recovery_from_prehash(self, prehash, &sig).unwrap();
-                // Reference: https://en.bitcoin.it/wiki/Secp256k1.
-                // const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-                // // Reference: https://neuromancer.sk/std/secg/secp256r1.
-                // const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
+            where
+                C: PrimeCurve + CurveArithmetic,
+                AffinePoint<C>:
+                    DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+                FieldBytesSize<C>: sec1::ModulusSize,
+                SignatureSize<C>: ArrayLength<u8>,
+            {
+                fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+                    cfg_if::cfg_if! {
+                        if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                            // Provides signature, recovery id, and prehash to call recover_from_prehash_secp256 (our generic recover function for secp256k1 and secp256r1)
+                            // which passes iff verify_signature_secp256k1 returns true
+                            // let mut sig = signature.clone();
+                            // let mut recid = 0u8;
+                            // if let Some(sig_normalized) = sig.normalize_s() {
+                            //     sig = sig_normalized;
+                            //     recid ^= 1;
+                            // }
+                            // let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
+                            // let recid = RecoveryId::trial_recovery_from_prehash(self, prehash, &sig).unwrap();
+                            // Reference: https://en.bitcoin.it/wiki/Secp256k1.
+                            const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+                            // Reference: https://neuromancer.sk/std/secg/secp256r1.
+                            const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
 
-                // let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
-                //     Some(Secp256Curve::K1)
-                // } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
-                //     Some(Secp256Curve::R1)
-                // } else {
-                //     None
-                // };
-                // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
-                // return Ok(());
+                            let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
+                                Some(Secp256Curve::K1)
+                            } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
+                                Some(Secp256Curve::R1)
+                            } else {
+                                None
+                            };
+                            // Self::recover_from_prehash_secp256(prehash, &sig, recid, Secp256Curve::R1)?;
+                            // return Ok(());
 
-                let pubkey = self.inner.to_sec1_bytes();
-                Self::verify_prehash_secp256(&pubkey, prehash, signature, Secp256Curve::R1)?;
-                return Ok(());
-            }
-            
+                            let pubkey = self.inner.to_encoded_point(true).as_bytes();
+                            Self::verify_prehash_secp256(&pubkey, prehash, signature, curve)?;
+                            return Ok(());
+                        }
+                        
+                    }
+                    let field = bits2field::<C>(prehash)?;
+                    self.inner.as_affine().verify_prehashed(&field, signature)
+                }
         }
-        let field = bits2field::<C>(prehash)?;
-        self.inner.as_affine().verify_prehashed(&field, signature)
+    }
+    else {
+        impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
+            where
+                C: PrimeCurve + CurveArithmetic,
+                AffinePoint<C>: VerifyPrimitive<C>,
+                SignatureSize<C>: ArrayLength<u8>,
+            {
+                fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+                    let field = bits2field::<C>(prehash)?;
+                    self.inner.as_affine().verify_prehashed(&field, signature)
+                }
+            }
+
     }
 }
+
 
 impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
