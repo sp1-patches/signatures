@@ -88,7 +88,12 @@ where
     ) -> Result<()> {
         let (r, s) = signature.split_scalars();
         let s_inv = *s.invert_vartime();
-        return Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+        let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+        if verified {
+            Ok(())
+        } else {
+            Err(Error::new())
+        }
     }
 
 
