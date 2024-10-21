@@ -2,6 +2,7 @@ use crate::{Error, RecoveryId, Result};
 use digest::generic_array::ArrayLength;
 use elliptic_curve::PrimeField;
 use elliptic_curve::{
+    ops::Invert,
     point::DecompressPoint,
     sec1::{self, FromEncodedPoint, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, Scalar,
