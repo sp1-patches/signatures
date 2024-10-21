@@ -10,7 +10,7 @@ use elliptic_curve::{
     generic_array::ArrayLength,
     point::{PointCompression, DecompressPoint},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
+    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey, FieldBytesEncoding,
 };
 use signature::{
     digest::{Digest, FixedOutput},
@@ -161,7 +161,7 @@ where
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
         cfg_if::cfg_if! {
             if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-                Self::verify_prehash(self,&msg_digest.finalize_fixed(), signature)?;
+                self.verify_prehash(&msg_digest.finalize_fixed(), signature)?;
                 return Ok(());
             }
             
