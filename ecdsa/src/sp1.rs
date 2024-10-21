@@ -230,7 +230,7 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp2
 
 fn recover_s_inv_unconstrained(sig: &[u8;64]) -> [u8; 32] {
     unconstrained! {
-        io::write(K1_ECRECOVER_HOOK, sig);
+        io::write(R1_ECRECOVER_HOOK, sig);
     }
     let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
     s_inv_bytes_le
