@@ -86,10 +86,16 @@ where
         signature: &Signature<C>,
         curve: Secp256Curve,
     ) -> Result<()> {
-        let (r, s) = signature.split_scalars();
-        let s_inv = *s.invert_vartime();
+        let mut sig_bytes = [0u8; 65];
+        sig_bytes[..64].copy_from_slice(&signature.to_bytes());
+        sig_bytes[64] = recovery_id.to_byte();
+        let (_, s_inv) =
+            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve);
+
+        // Convert the s_inverse bytes to a scalar.
+        let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
         // let decompressed_pubkey = decompress_pubkey(pubkey, curve)?;
-        let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inv, curve);
+        let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inverse, curve);
         if verified {
             Ok(())
         } else {
