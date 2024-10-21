@@ -184,13 +184,11 @@ where
 // }
 
 impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
-    where
-        C: PrimeCurve + CurveArithmetic,
-        D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-        AffinePoint<C>:
-            DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
-        FieldBytesSize<C>: sec1::ModulusSize,
-        SignatureSize<C>: ArrayLength<u8>,
+where
+    C: PrimeCurve + CurveArithmetic,
+    D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
+    AffinePoint<C>: VerifyPrimitive<C>,
+    SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
         // cfg_if::cfg_if! {
