@@ -238,32 +238,15 @@ cfg_if::cfg_if! {
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
-        impl<C, D> Verifier<Signature<C>> for VerifyingKey<C>
-        where
-            C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-            AffinePoint<C>:
-                DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
-            FieldBytesSize<C>: sec1::ModulusSize,
-            SignatureSize<C>: ArrayLength<u8>,
-        {
-            fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
-                DigestVerifier::<D, Signature<C>>::verify_digest(self, C::Digest::new_with_prefix(msg), signature)
-            }
-        }
-    }
-    else {
-        impl<C> Verifier<Signature<C>> for VerifyingKey<C>
-        where
-            C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-            AffinePoint<C>: VerifyPrimitive<C>,
-            SignatureSize<C>: ArrayLength<u8>,
-        {
-            fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
-                DigestVerifier::<D, Signature<C>>::verify_digest(self, C::Digest::new_with_prefix(msg), signature)
-            }
-        }
+
+impl<C> Verifier<Signature<C>> for VerifyingKey<C>
+where
+    C: PrimeCurve + CurveArithmetic + DigestPrimitive,
+    AffinePoint<C>: VerifyPrimitive<C>,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
+        self.verify_digest(C::Digest::new_with_prefix(msg), signature)
     }
 }
 
