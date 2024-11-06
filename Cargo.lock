@@ -687,8 +687,8 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "sp1-lib"
-version = "3.0.0-rc4"
-source = "git+https://github.com/succinctlabs/sp1.git?branch=secp256r1#9af1686c3a07bfe2edd0119b8cb2175729f467fe"
+version = "3.0.0"
+source = "git+https://github.com/succinctlabs/sp1.git?rev=e443fc9ca17edbfffb8af8a6d3834659739f7705#e443fc9ca17edbfffb8af8a6d3834659739f7705"
 dependencies = [
  "bincode",
  "serde",
