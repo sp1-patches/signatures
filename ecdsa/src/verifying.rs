@@ -1,15 +1,22 @@
 //! ECDSA verifying: checking signatures are authentic using a [`VerifyingKey`].
+//!
+//! # ⚠️ Warning: our patching can cause issues for users who want to use VerifyingKey on curves that don't 
+//!  implement the traits: 
+//!     AffinePoint<C>:
+//!     DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
+//!     FieldBytesSize<C>: sec1::ModulusSize,
 
 use crate::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
 };
+use crate::RecoveryId;
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
-    point::PointCompression,
+    point::{PointCompression, DecompressPoint},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
+    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey, FieldBytesEncoding,
 };
 use signature::{
     digest::{Digest, FixedOutput},
@@ -47,6 +54,14 @@ use {
 
 #[cfg(all(feature = "pem", feature = "serde"))]
 use serdect::serde::{de, ser, Deserialize, Serialize};
+
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        use digest::generic_array::GenericArray;
+        use elliptic_curve::Curve;
+        use crate::sp1::Secp256Curve;
+    }
+}
 
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
@@ -146,30 +161,66 @@ impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
+                return Ok(());
+            }
+        }
         self.inner.as_affine().verify_digest(msg_digest, signature)
     }
 }
 
+
 impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
-where
-    C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C>,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
-        let field = bits2field::<C>(prehash)?;
-        self.inner.as_affine().verify_prehashed(&field, signature)
-    }
+    where
+        C: PrimeCurve + CurveArithmetic,
+        AffinePoint<C>:
+            DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+        FieldBytesSize<C>: sec1::ModulusSize,
+        SignatureSize<C>: ArrayLength<u8>,
+    {
+        fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+            cfg_if::cfg_if! {
+                if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                    // Reference: https://en.bitcoin.it/wiki/Secp256k1.
+                    const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+                    // Reference: https://neuromancer.sk/std/secg/secp256r1.
+                    const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+
+                    let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
+                        Some(Secp256Curve::K1)
+                    } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
+                        Some(Secp256Curve::R1)
+                    } else {
+                        None
+                    };
+                    let point = self.inner.to_encoded_point(false);
+                    let pubkey = point.as_bytes();
+                    let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
+                    Self::verify_prehash_secp256(pubkey_array, prehash, signature, curve.unwrap())?;
+                    return Ok(());
+                }
+                
+            }
+            let field = bits2field::<C>(prehash)?;
+            self.inner.as_affine().verify_prehashed(&field, signature)
+        }
 }
+   
 
 impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
@@ -181,7 +232,9 @@ where
 impl<C> Verifier<SignatureWithOid<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], sig: &SignatureWithOid<C>) -> Result<()> {
@@ -200,7 +253,9 @@ impl<C, D> DigestVerifier<D, der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
@@ -215,7 +270,9 @@ where
 impl<C> PrehashVerifier<der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
@@ -230,7 +287,9 @@ where
 impl<C> Verifier<der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
