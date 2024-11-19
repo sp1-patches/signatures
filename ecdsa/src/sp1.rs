@@ -161,9 +161,8 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([
         io::write(FD_ECRECOVER_HOOK_2, &buf);
     }
  
-    let success: u8 = io::read_vec().first().expect("A status flag from the executor, this is a bug");
-
-    if success == &0 {
+    let success = io::read_vec();
+    if success.first().expect("A status flag from the executor, this is a bug") == &0 {
         return Err(Error::new());
     }
 
