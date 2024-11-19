@@ -302,7 +302,9 @@ where
 
                 // Note: An additional check can be added to ensure the field bytes size is 32 bytes, but this is not neceessary.
                 if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) && prehash.len() == 32 {
-                    return Self::recover_from_prehash_secp256k1(prehash, signature, recovery_id);
+                    if let Ok(s) = Self::recover_from_prehash_secp256k1(prehash, signature, recovery_id) {
+                        return Ok(s);
+                    }
                 }
             }
         }
