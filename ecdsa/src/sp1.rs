@@ -160,6 +160,11 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33]
         buf_msg_hash.copy_from_slice(msg_hash);
         io::write(FD_ECRECOVER_HOOK, &buf);
     }
+    
+    let success: u8 = io::read_vec().try_into().unwrap();
+    if success == 0 {
+        panic!("ECRecover hook failed");
+    }
 
     let recovered_compressed_pubkey: [u8; 33] = io::read_vec().try_into().unwrap();
     let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
