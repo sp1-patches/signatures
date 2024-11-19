@@ -1,6 +1,6 @@
 [package]
 name = "ecdsa"
-version = "0.16.9"
+version = "0.17.0"
 description = """
 Pure Rust implementation of the Elliptic Curve Digital Signature Algorithm
 (ECDSA) as specified in FIPS 186-4 (Digital Signature Standard), providing
@@ -30,7 +30,7 @@ cfg-if = "1.0"
 hex-literal = "0.4"
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-lib = "3"
+sp1-lib = "3.3.0"
 anyhow = "1.0"
 
 [dev-dependencies]

@@ -8,7 +8,7 @@ use elliptic_curve::{
 };
 
 use elliptic_curve::Field;
-use sp1_lib::io::{self, FD_ECRECOVER_HOOK};
+use sp1_lib::io::{self, FD_ECRECOVER_HOOK_2};
 use sp1_lib::unconstrained;
 use sp1_lib::{
     secp256k1::Secp256k1Point, syscall_secp256k1_decompress, utils::AffinePoint as Sp1AffinePoint,
@@ -158,12 +158,12 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([
         let (buf_sig, buf_msg_hash) = buf.split_at_mut(sig.len());
         buf_sig.copy_from_slice(sig);
         buf_msg_hash.copy_from_slice(msg_hash);
-        io::write(FD_ECRECOVER_HOOK, &buf);
+        io::write(FD_ECRECOVER_HOOK_2, &buf);
     }
-    
-    let success: u8 = io::read_vec().first().copied().expect("A success flag from the executor, this is a bug");
+ 
+    let success: u8 = io::read_vec().first().expect("A status flag from the executor, this is a bug");
 
-    if success == 0 {
+    if success == &0 {
         return Err(Error::new());
     }
 
