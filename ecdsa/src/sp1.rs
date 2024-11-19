@@ -39,7 +39,7 @@ where
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
         sig_bytes[64] = recovery_id.to_byte();
         let (compressed_pubkey, s_inv) =
-            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap());
+            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap())?;
 
         // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
@@ -149,7 +149,7 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 /// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
 /// [`VerifyingKey::recover_from_prehash_secp256k1`] to securely recover the public key associated with
 /// a signature and message hash.
-fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33], [u8; 32]) {
+fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([u8; 33], [u8; 32])> {
     // The `unconstrained!` wrapper is used to not include the cycles used to get the "hint" for the compressed
     // public key and s_inverse values from a non-zkVM context, because the values will be constrained
     // in the VM.
@@ -161,15 +161,16 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> ([u8; 33]
         io::write(FD_ECRECOVER_HOOK, &buf);
     }
     
-    let success: u8 = io::read_vec().try_into().unwrap();
+    let success: u8 = io::read_vec().first().copied().expect("A success flag from the executor, this is a bug");
+
     if success == 0 {
-        panic!("ECRecover hook failed");
+        return Err(Error::new());
     }
 
-    let recovered_compressed_pubkey: [u8; 33] = io::read_vec().try_into().unwrap();
-    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
+    let recovered_compressed_pubkey: [u8; 33] = io::read_vec().try_into().expect("A compressed public key from the executor, this is a bug");
+    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().expect("An s inverse value from the executor, this is a bug");
 
-    (recovered_compressed_pubkey, s_inv_bytes_le)
+    Ok((recovered_compressed_pubkey, s_inv_bytes_le))
 }
 
 /// Takes in a compressed public key and decompresses it using the SP1 syscall `syscall_secp256k1_decompress`.
