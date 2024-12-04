@@ -53,7 +53,7 @@ where
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
 
         // Transform the compressed public key into uncompressed form.
-        let pubkey = decompress_pubkey(&compressed_pubkey)?;
+        let pubkey = decompress_pubkey(&compressed_pubkey, curve)?;
 
         // Verify the signature against the recovered public key. The last byte of the signature
         // is the recovery id, which is not used in the verification process.
