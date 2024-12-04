@@ -8,13 +8,20 @@ use elliptic_curve::{
 };
 
 use elliptic_curve::Field;
-use sp1_lib::io::{self, FD_ECRECOVER_HOOK_2};
+use sp1_lib::io::{self, FD_K1_ECRECOVER_HOOK, FD_R1_ECRECOVER_HOOK};
 use sp1_lib::unconstrained;
 use sp1_lib::{
     secp256k1::Secp256k1Point, syscall_secp256k1_decompress, utils::AffinePoint as Sp1AffinePoint,
+    secp256r1::Secp256r1Point, syscall_secp256r1_decompress,
 };
 
 use crate::{hazmat::bits2field, Signature, SignatureSize, VerifyingKey};
+
+#[derive(Debug, Clone, Copy)]
+pub enum Secp256Curve {
+    K1, // secp256k1
+    R1, // secp256r1
+}
 
 #[cfg(feature = "verifying")]
 impl<C> VerifyingKey<C>
@@ -29,17 +36,18 @@ where
     ///
     /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
     /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
-    pub fn recover_from_prehash_secp256k1(
+    pub fn recover_from_prehash_secp256(
         prehash: &[u8],
         signature: &Signature<C>,
         recovery_id: RecoveryId,
+        curve: Secp256Curve,
     ) -> Result<Self> {
         // Recover the compressed public key and s_inverse value from the signature and prehashed message.
         let mut sig_bytes = [0u8; 65];
         sig_bytes[..64].copy_from_slice(&signature.to_bytes());
         sig_bytes[64] = recovery_id.to_byte();
         let (compressed_pubkey, s_inv) =
-            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap())?;
+            recover_ecdsa_unconstrained(&sig_bytes, prehash.try_into().unwrap(), curve)?;
 
         // Convert the s_inverse bytes to a scalar.
         let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
@@ -49,11 +57,12 @@ where
 
         // Verify the signature against the recovered public key. The last byte of the signature
         // is the recovery id, which is not used in the verification process.
-        let verified = Self::verify_signature_secp256k1(
+        let verified = Self::verify_signature_secp256(
             &pubkey,
             &prehash.try_into().unwrap(),
             &signature,
             &s_inverse,
+            curve,
         );
 
         // If the signature is valid, return the public key.
@@ -63,6 +72,7 @@ where
             Err(Error::new())
         }
     }
+
 
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
@@ -75,18 +85,21 @@ where
     ///
     /// This function is a modified version of [`crate::hazmat::verify_prehashed`] with
     /// changes implemented to support SP1 acceleration.
-    pub fn verify_signature_secp256k1(
+    pub fn verify_signature_secp256(
         pubkey: &[u8; 65],
         msg_hash: &[u8; 32],
         signature: &Signature<C>,
         s_inverse: &Scalar<C>,
+        curve: Secp256Curve,
     ) -> bool {
         let mut pubkey_x_le_bytes = pubkey[1..33].to_vec();
         pubkey_x_le_bytes.reverse();
         let mut pubkey_y_le_bytes = pubkey[33..].to_vec();
         pubkey_y_le_bytes.reverse();
-        let affine =
-            Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat());
+        let affine = match curve {
+            Secp256Curve::K1 => Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+            Secp256Curve::R1 => Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+        };
 
         // Split the signature into its two scalars.
         let (r, s) = signature.split_scalars();
@@ -110,13 +123,20 @@ where
         let u2_le_bits = be_bytes_to_le_bits(u2_be_bytes.as_slice().try_into().unwrap());
 
         // Compute the MSM.
-        let res = Secp256k1Point::multi_scalar_multiplication(
-            &u1_le_bits,
+        let res = match curve {
+            Secp256Curve::K1 => Secp256k1Point::multi_scalar_multiplication(
+                &u1_le_bits,
             Secp256k1Point::new(Secp256k1Point::GENERATOR),
-            &u2_le_bits,
-            affine,
-        )
-        .unwrap();
+                &u2_le_bits,
+                affine,
+            ),
+            Secp256Curve::R1 => Secp256r1Point::multi_scalar_multiplication(
+                &u1_le_bits,
+                Secp256r1Point::new(Secp256r1Point::GENERATOR),
+                &u2_le_bits,
+                affine,
+            ),
+        }.unwrap();
 
         // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
         let mut x_bytes_be = [0u8; 32];
@@ -158,7 +178,10 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([
         let (buf_sig, buf_msg_hash) = buf.split_at_mut(sig.len());
         buf_sig.copy_from_slice(sig);
         buf_msg_hash.copy_from_slice(msg_hash);
-        io::write(FD_ECRECOVER_HOOK_2, &buf);
+        match curve {
+            Secp256Curve::K1 => io::write(FD_K1_ECRECOVER_HOOK, &buf),
+            Secp256Curve::R1 => io::write(FD_R1_ECRECOVER_HOOK, &buf),
+        };
     }
  
     let success = io::read_vec();
@@ -184,7 +207,7 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([
 ///
 /// SAFETY: Our syscall will check that the x and y coordinates are within the
 /// secp256k1 scalar field.
-fn decompress_pubkey(compressed_pubkey: &[u8; 33]) -> Result<[u8; 65]> {
+fn decompress_pubkey(compressed_pubkey: &[u8; 33], curve: Secp256Curve) -> Result<[u8; 65]> {
     let mut decompressed_key: [u8; 64] = [0; 64];
     decompressed_key[..32].copy_from_slice(&compressed_pubkey[1..]);
     let is_odd = match compressed_pubkey[0] {
@@ -193,7 +216,10 @@ fn decompress_pubkey(compressed_pubkey: &[u8; 33]) -> Result<[u8; 65]> {
         _ => unreachable!("The first byte of the compressed public key must be 0x02 or 0x03."),
     };
     unsafe {
-        syscall_secp256k1_decompress(&mut decompressed_key, is_odd);
+        match curve {
+            Secp256Curve::K1 => syscall_secp256k1_decompress(&mut decompressed_key, is_odd),
+            Secp256Curve::R1 => syscall_secp256r1_decompress(&mut decompressed_key, is_odd),
+        };
     }
 
     let mut uncompressed_pubkey: [u8; 65] = [0; 65];

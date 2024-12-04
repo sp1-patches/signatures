@@ -38,6 +38,7 @@ cfg_if::cfg_if! {
     if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
         use digest::generic_array::GenericArray;
         use elliptic_curve::Curve;
+        use crate::sp1::Secp256Curve;
     }
 }
 
@@ -299,12 +300,22 @@ where
             if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
                 // Reference: https://en.bitcoin.it/wiki/Secp256k1.
                 const SECP256K1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+                // Reference: https://neuromancer.sk/std/secg/secp256r1.
+                const SECP256R1_ORDER: [u8; 32] = hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+
+                let curve = if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) {
+                    Some(Secp256Curve::K1)
+                } else if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256R1_ORDER)) {
+                    Some(Secp256Curve::R1)
+                } else {
+                    None
+                };
 
                 // Note: An additional check can be added to ensure the field bytes size is 32 bytes, but this is not neceessary.
-                if C::ORDER == <C as Curve>::Uint::decode_field_bytes(GenericArray::from_slice(&SECP256K1_ORDER)) && prehash.len() == 32 {
+                if prehash.len() == 32 && curve.is_some() {
                     // If we get an error here this means the executor couldnt witness the recovery
                     // so lets continue normally so we can constrain the failure.
-                    if let Ok(s) = Self::recover_from_prehash_secp256k1(prehash, signature, recovery_id) {
+                    if let Ok(s) = Self::recover_from_prehash_secp256(prehash, signature, recovery_id, curve.unwrap()) {
                         return Ok(s);
                     }
                 }
