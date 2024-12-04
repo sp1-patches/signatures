@@ -34,7 +34,7 @@ where
     /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
     /// signature over that prehashed message, and a [`RecoveryId`].
     ///
-    /// This function leverages SP1 syscalls for secp256k1 to accelerate public key recovery
+    /// This function leverages SP1 syscalls for secp256k1 or secp256r1 to accelerate public key recovery
     /// in the zkVM. Verifies the signature against the recovered public key to ensure correctness.
     pub fn recover_from_prehash_secp256(
         prehash: &[u8],
@@ -78,7 +78,7 @@ where
     ///
     /// Accepts the following arguments:
     /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
-    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point or Secp256r1Point.
     /// - `msg_hash`: The prehashed message to verify the signature against.
     /// - `signature`: The signature to verify.
     /// - `s_inverse`: The inverse of the scalar `s` in the signature.
@@ -167,7 +167,7 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 /// Outside of the VM, computes the pubkey and s_inverse value from a signature and a message hash.
 ///
 /// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
-/// [`VerifyingKey::recover_from_prehash_secp256k1`] to securely recover the public key associated with
+/// [`VerifyingKey::recover_from_prehash_secp256`] to securely recover the public key associated with
 /// a signature and message hash.
 fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([u8; 33], [u8; 32])> {
     // The `unconstrained!` wrapper is used to not include the cycles used to get the "hint" for the compressed
@@ -204,9 +204,10 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([
 /// and the remaining 64 bytes being the x and y coordinates of the decompressed pubkey in big-endian.
 ///
 /// More details on secp256k1 public key format can be found in the [Bitcoin wiki](https://en.bitcoin.it/wiki/Protocol_documentation#Signatures).
+/// More details on secp256r1 public key format can be found [here](https://lf-hyperledger.atlassian.net/wiki/spaces/BESU/pages/22154986/SECP256R1+Support).
 ///
 /// SAFETY: Our syscall will check that the x and y coordinates are within the
-/// secp256k1 scalar field.
+/// secp256k1/secp256r1 scalar field.
 fn decompress_pubkey(compressed_pubkey: &[u8; 33], curve: Secp256Curve) -> Result<[u8; 65]> {
     let mut decompressed_key: [u8; 64] = [0; 64];
     decompressed_key[..32].copy_from_slice(&compressed_pubkey[1..]);
