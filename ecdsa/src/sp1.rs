@@ -96,10 +96,6 @@ where
         pubkey_x_le_bytes.reverse();
         let mut pubkey_y_le_bytes = pubkey[33..].to_vec();
         pubkey_y_le_bytes.reverse();
-        let affine = match curve {
-            Secp256Curve::K1 => Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-            Secp256Curve::R1 => Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
-        };
 
         // Split the signature into its two scalars.
         let (r, s) = signature.split_scalars();
@@ -122,26 +118,38 @@ where
         let u1_le_bits = be_bytes_to_le_bits(u1_be_bytes.as_slice().try_into().unwrap());
         let u2_le_bits = be_bytes_to_le_bits(u2_be_bytes.as_slice().try_into().unwrap());
 
-        // Compute the MSM.
-        let res = match curve {
-            Secp256Curve::K1 => Secp256k1Point::multi_scalar_multiplication(
-                &u1_le_bits,
-            Secp256k1Point::new(Secp256k1Point::GENERATOR),
-                &u2_le_bits,
-                affine,
-            ),
-            Secp256Curve::R1 => Secp256r1Point::multi_scalar_multiplication(
-                &u1_le_bits,
-                Secp256r1Point::new(Secp256r1Point::GENERATOR),
-                &u2_le_bits,
-                affine,
-            ),
-        }.unwrap();
+        let x_bytes_be = match curve {
+            Secp256Curve::K1 => {
+                let point = Secp256k1Point::multi_scalar_multiplication(
+                    &u1_le_bits,
+                    Secp256k1Point::new(Secp256k1Point::GENERATOR),
+                    &u2_le_bits,
+                    Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                );
+                let p = point.unwrap();
 
-        // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
-        let mut x_bytes_be = [0u8; 32];
-        x_bytes_be[..32].copy_from_slice(&res.to_le_bytes()[..32]);
-        x_bytes_be.reverse();
+                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                let mut x_bytes_be = [0u8; 32];
+                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                x_bytes_be.reverse();
+                x_bytes_be
+            },
+            Secp256Curve::R1 => {
+                let point = Secp256r1Point::multi_scalar_multiplication(
+                    &u1_le_bits,
+                    Secp256r1Point::new(Secp256r1Point::GENERATOR),
+                    &u2_le_bits,
+                    Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                );
+                let p = point.unwrap();
+
+                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                let mut x_bytes_be = [0u8; 32];
+                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                x_bytes_be.reverse();
+                x_bytes_be
+            },
+        };
 
         let x_field = bits2field::<C>(&x_bytes_be);
         if x_field.is_err() {
@@ -169,7 +177,7 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 /// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
 /// [`VerifyingKey::recover_from_prehash_secp256`] to securely recover the public key associated with
 /// a signature and message hash.
-fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32]) -> Result<([u8; 33], [u8; 32])> {
+fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp256Curve) -> Result<([u8; 33], [u8; 32])> {
     // The `unconstrained!` wrapper is used to not include the cycles used to get the "hint" for the compressed
     // public key and s_inverse values from a non-zkVM context, because the values will be constrained
     // in the VM.
