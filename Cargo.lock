@@ -657,8 +657,8 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "sp1-lib"
-version = "3.3.0"
-source = "git+https://github.com/succinctlabs/sp1?branch=n/fix-ecdsa-hook-v3#6cbd4df4d67be96a7e7fd47ea8ba9035e98d02b3"
+version = "3.4.0"
+source = "git+https://github.com/succinctlabs/sp1-wip.git?branch=ratan/allocators#0ea0ca897321eb1523f8d09588738d8243871929"
 dependencies = [
  "bincode",
  "serde",
