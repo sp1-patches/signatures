@@ -4,6 +4,7 @@ use elliptic_curve::PrimeField;
 use elliptic_curve::{
     point::DecompressPoint,
     sec1::{self, FromEncodedPoint, ToEncodedPoint},
+    ops::Reduce,
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, Scalar,
 };
 
@@ -155,7 +156,7 @@ where
         if x_field.is_err() {
             return false;
         }
-        *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap()
+        *r == Scalar::<C>::reduce_bytes(&x_field.unwrap())
     }
 }
 
