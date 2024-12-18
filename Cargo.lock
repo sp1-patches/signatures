@@ -657,8 +657,8 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "sp1-lib"
-version = "4.0.0-rc.1"
-source = "git+https://github.com/succinctlabs/sp1.git?branch=v4.0.0-rc.2#8b3be091d0420fbd2119397ddc66da4cf70c6d84"
+version = "4.0.0-rc.2"
+source = "git+https://github.com/succinctlabs/sp1.git?branch=umadayal/sinv-hook#e299629cafea888a8e968ef1028f5f83eea83600"
 dependencies = [
  "bincode",
  "serde",
