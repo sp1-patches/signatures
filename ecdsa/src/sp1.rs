@@ -8,7 +8,7 @@ use elliptic_curve::{
 };
 
 use elliptic_curve::Field;
-use sp1_lib::io::{self, FD_K1_ECRECOVER_HOOK, FD_R1_ECRECOVER_HOOK};
+use sp1_lib::io::{self, FD_K1_ECRECOVER_HOOK, FD_R1_ECRECOVER_HOOK, FD_S_INVERSE};
 use sp1_lib::unconstrained;
 use sp1_lib::{
     secp256k1::Secp256k1Point, syscall_secp256k1_decompress, utils::AffinePoint as Sp1AffinePoint,
