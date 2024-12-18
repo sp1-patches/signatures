@@ -73,6 +73,39 @@ where
         }
     }
 
+    /// Verify the prehashed message against the provided ECDSA signature using SP1 acceleration.
+    /// (essentially the same as verify_signature_secp256, but only takes in signature and finds inverse of s)
+    /// Accepts the following arguments:
+    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
+    /// - `msg_hash`: The prehashed message to verify the signature against.
+    /// - `signature`: The signature to verify.
+    /// - `curve`: The curve to verify the signature against.
+    pub fn verify_prehash_secp256(
+        pubkey: &[u8; 65],
+        prehash: &[u8],
+        signature: &Signature<C>,
+        curve: Secp256Curve,
+    ) -> Result<()> {
+        let mut sig_bytes = [0u8; 65];
+        sig_bytes[..64].copy_from_slice(&signature.to_bytes());
+        match curve {
+            Secp256Curve::K1 => sig_bytes[64] = 0 as u8,
+            Secp256Curve::R1 => sig_bytes[64] = 1 as u8,
+        }
+        let s_inv =
+            recover_s_inv_unconstrained(&sig_bytes)?;
+        
+        // Convert the s_inverse bytes to a scalar.
+        let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
+        let verified = Self::verify_signature_secp256(pubkey, prehash.try_into().unwrap(), signature, &s_inverse, curve);
+        if verified {
+            Ok(())
+        } else {
+            Err(Error::new())
+        }
+    }
+
 
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
@@ -201,6 +234,23 @@ fn recover_ecdsa_unconstrained(sig: &[u8; 65], msg_hash: &[u8; 32], curve: Secp2
     let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().expect("An s inverse value from the executor, this is a bug");
 
     Ok((recovered_compressed_pubkey, s_inv_bytes_le))
+}
+
+/// Outside of the VM, computes the s_inverse value from a signature.
+///
+/// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
+/// [`VerifyingKey::recover_from_prehash_secp256`] to securely recover the public key associated with
+/// a signature and message hash.
+fn recover_s_inv_unconstrained(sig: &[u8;65]) -> Result<[u8; 32]> {
+    unconstrained! {
+        io::write(FD_S_INVERSE, sig);
+    }
+    let success = io::read_vec();
+    if success.first().expect("A status flag from the executor, this is a bug") == &0 {
+        return Err(Error::new());
+    }
+    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().expect("An s inverse value from the executor, this is a bug");
+    Ok(s_inv_bytes_le)
 }
 
 /// Takes in a compressed public key and decompresses it using the SP1 syscall `syscall_secp256k1_decompress`.
