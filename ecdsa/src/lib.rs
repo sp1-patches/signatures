@@ -1,4 +1,4 @@
-#![no_std]
+//#![no_std]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
 #![doc(
@@ -70,9 +70,6 @@ pub mod hazmat;
 mod signing;
 #[cfg(feature = "verifying")]
 mod verifying;
-
-#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
-mod sp1;
 
 pub use crate::{normalized::NormalizedSignature, recovery::RecoveryId};
 
