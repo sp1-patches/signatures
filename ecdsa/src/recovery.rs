@@ -47,8 +47,9 @@ use {
         Curve,
     },
     sp1_lib::{
-        secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint, utils::WeierstrassAffinePoint
-    }
+        secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
+        utils::WeierstrassAffinePoint,
+    },
 };
 
 /// Recovery IDs, a.k.a. "recid".
@@ -321,7 +322,13 @@ where
         }
 
         #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
-        return Self::recover_from_prehash_zkvm(r, r_bytes.as_slice().try_into().unwrap(), recovery_id.is_y_odd(), s, z);
+        return Self::recover_from_prehash_zkvm(
+            r,
+            r_bytes.as_slice().try_into().unwrap(),
+            recovery_id.is_y_odd(),
+            s,
+            z,
+        );
 
         let R = AffinePoint::<C>::decompress(&r_bytes, u8::from(recovery_id.is_y_odd()).into());
 
@@ -357,7 +364,7 @@ where
         z: <C as CurveArithmetic>::Scalar,
     ) -> Result<Self> {
         let (a, b, nqr, base_field_params, curve_id) = ec_params_256_bit::<C>();
-        
+
         // If the `R_x` value is not canonical, return failure.
         let R_x = U256::from_be_slice(&R_x_bytes);
         if &R_x >= base_field_params.modulus() {
@@ -396,20 +403,27 @@ where
         }
 
         // The point R in the form [x || y] where x and y are 32 bytes each, big endian.
-        let R_y_bytes = sp1_lib::io::read_vec(); 
+        let R_y_bytes = sp1_lib::io::read_vec();
         let R_y = U256::from_be_slice(&R_y_bytes);
 
         // `R_y` hint should be in canonical form.
-        assert!(&R_y < base_field_params.modulus(), "hint should return canonical value");
+        assert!(
+            &R_y < base_field_params.modulus(),
+            "hint should return canonical value"
+        );
 
         let R_y = DynResidue::new(&R_y, base_field_params);
 
         // The y-coordinate must be the sqrt of alpha
         assert!(R_y * R_y == alpha, "Invalid hint for R_y");
 
-        // Check the lowest bit (corresponding to the 2^0 place), constraining the point by the recovery id. 
-        assert_eq!(R_y.retrieve().to_be_bytes().as_slice()[31] & 1 == 1, R_y_odd, "Invalid hint for R_y_odd");
-        
+        // Check the lowest bit (corresponding to the 2^0 place), constraining the point by the recovery id.
+        assert_eq!(
+            R_y.retrieve().to_be_bytes().as_slice()[31] & 1 == 1,
+            R_y_odd,
+            "Invalid hint for R_y_odd"
+        );
+
         // This should be the big endian representation of the inverse of r mod n.
         let r_inv_bytes = sp1_lib::io::read_vec();
 
@@ -431,7 +445,7 @@ where
         let u2_le_bits = be_bytes_to_le_bits(u2_bytes.as_slice().try_into().unwrap());
         let R_point_bytes: [u8; 64] = {
             let mut R_point_bytes = [0u8; 64];
-            
+
             let mut R_x_bytes = R_x_bytes;
             R_x_bytes.reverse();
 
@@ -458,7 +472,9 @@ where
                     return Err(Error::new());
                 }
 
-                p.to_le_bytes().try_into().expect("a valid point should have 64 bytes")    
+                p.to_le_bytes()
+                    .try_into()
+                    .expect("a valid point should have 64 bytes")
             }
             2 => {
                 let p = Secp256r1Point::multi_scalar_multiplication(
@@ -467,37 +483,39 @@ where
                     &u2_le_bits,
                     Secp256r1Point::from_le_bytes(&R_point_bytes),
                 );
- 
+
                 // Return error for result being the point at infinity.
                 if p.is_infinity() {
                     return Err(Error::new());
                 }
 
-                p.to_le_bytes().try_into().expect("a valid point should have 64 bytes")
-                            
+                p.to_le_bytes()
+                    .try_into()
+                    .expect("a valid point should have 64 bytes")
             }
             _ => unimplemented!(),
         };
-       
+
         // Convert the point to big endian.
         let pk_bytes = {
-                let (x, y) = pk_le_bytes.split_at_mut(32);
+            let (x, y) = pk_le_bytes.split_at_mut(32);
 
-                x.reverse();
-                y.reverse();
+            x.reverse();
+            y.reverse();
 
-                let mut be_bytes = [0u8; 64];
-                be_bytes[0..32].copy_from_slice(&x);
-                be_bytes[32..].copy_from_slice(&y);
+            let mut be_bytes = [0u8; 64];
+            be_bytes[0..32].copy_from_slice(&x);
+            be_bytes[32..].copy_from_slice(&y);
 
-                be_bytes
-
+            be_bytes
         };
 
         let encoded_point =
             EncodedPoint::<C>::from_untagged_bytes(GenericArray::from_slice(&pk_bytes));
 
-        let affine = AffinePoint::<C>::from_encoded_point(&encoded_point).into_option().unwrap();
+        let affine = AffinePoint::<C>::from_encoded_point(&encoded_point)
+            .into_option()
+            .unwrap();
 
         Ok(Self::from_affine(affine)?)
     }
@@ -519,10 +537,22 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 }
 
 #[cfg(target_os = "zkvm")]
-type ECParams = (DynResidue<8>, DynResidue<8>, DynResidue<8>, DynResidueParams<8>, u8);
+type ECParams = (
+    DynResidue<8>,
+    DynResidue<8>,
+    DynResidue<8>,
+    DynResidueParams<8>,
+    u8,
+);
 
 #[cfg(not(target_os = "zkvm"))]
-type ECParams = (DynResidue<4>, DynResidue<4>, DynResidue<4>, DynResidueParams<4>, u8);
+type ECParams = (
+    DynResidue<4>,
+    DynResidue<4>,
+    DynResidue<4>,
+    DynResidueParams<4>,
+    u8,
+);
 
 #[inline]
 //#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
@@ -533,7 +563,7 @@ fn ec_params_256_bit<C: Curve>() -> ECParams {
         nqr[31] = 3;
         nqr
     };
-        
+
     // Reference: https://en.bitcoin.it/wiki/Secp256k1.
     // This is the order of the elliptic curve group.
     const SECP256K1_ORDER: [u8; 32] =
@@ -547,7 +577,7 @@ fn ec_params_256_bit<C: Curve>() -> ECParams {
         let mut b = [0u8; 32];
         b[31] = 7;
         b
-    };    
+    };
 
     // Reference: https://neuromancer.sk/std/secg/secp256r1.
     // This is the order of the elliptic curve group.
@@ -583,7 +613,13 @@ fn ec_params_256_bit<C: Curve>() -> ECParams {
         unimplemented!("Unsupported curve");
     };
 
-    (a, b, DynResidue::new(&U256::from_be_bytes(NQR), base_field_params), base_field_params, curve_id)
+    (
+        a,
+        b,
+        DynResidue::new(&U256::from_be_bytes(NQR), base_field_params),
+        base_field_params,
+        curve_id,
+    )
 }
 
 #[cfg(test)]
