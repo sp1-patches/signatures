@@ -47,7 +47,7 @@ use {
         Curve,
     },
     sp1_lib::{
-        secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
+        secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint, utils::WeierstrassAffinePoint
     }
 };
 
@@ -304,6 +304,8 @@ where
         signature: &Signature<C>,
         recovery_id: RecoveryId,
     ) -> Result<Self> {
+        // `split_scalars` checks that `r`, `s` are non-zero and within scalar range.
+        // `ScalarPrimitive` is guaranteed to be canonical, and `NonZeroScalar` checks value is non-zero.
         let (r, s) = signature.split_scalars();
         let z = <Scalar<C> as Reduce<C::Uint>>::reduce_bytes(&bits2field::<C>(prehash)?);
 
@@ -356,10 +358,12 @@ where
     ) -> Result<Self> {
         let (a, b, nqr, base_field_params, curve_id) = ec_params_256_bit::<C>();
         
+        // If the `R_x` value is not canonical, return failure.
         let R_x = U256::from_be_slice(&R_x_bytes);
-        assert!(&R_x < base_field_params.modulus(), "Invalid hint for R_x");
-
-        let R_x = DynResidue::new(&U256::from_be_slice(&R_x_bytes), base_field_params);
+        if &R_x >= base_field_params.modulus() {
+            return Err(Error::new());
+        }
+        let R_x = DynResidue::new(&R_x, base_field_params);
         // The first step of the recovery is to decompress the R point, whose x-coordinate is given
         // by r_x_bytes.
         let alpha = R_x * R_x * R_x + (a * R_x) + b;
@@ -392,7 +396,10 @@ where
 
         // The point R in the form [x || y] where x and y are 32 bytes each, big endian.
         let R_y_bytes = sp1_lib::io::read_vec(); 
-        let R_y = DynResidue::new(&U256::from_be_slice(&R_y_bytes), base_field_params);
+        let R_y = U256::from_be_slice(&R_y_bytes);
+        // `R_y` hint should be in canonical form.
+        assert!(&R_y < base_field_params.modulus(), "hint should return canonical value");
+        let R_y = DynResidue::new(&R_y, base_field_params);
         // The y-coordinate must be the sqrt of alpha
         assert!(R_y * R_y == alpha, "Invalid hint for R_y");
 
@@ -440,8 +447,12 @@ where
                     Secp256k1Point::new(Secp256k1Point::GENERATOR),
                     &u2_le_bits,
                     Secp256k1Point::from_le_bytes(&R_point_bytes),
-                )
-                .unwrap();
+                );
+
+                // Return error for result being the point at infinity.
+                if p.is_infinity() {
+                    return Err(Error::new());
+                }
 
                 let mut le_bytes = p.to_le_bytes();
                 let (x, y) = le_bytes.split_at_mut(32);
@@ -460,8 +471,12 @@ where
                     Secp256r1Point::new(Secp256r1Point::GENERATOR),
                     &u2_le_bits,
                     Secp256r1Point::from_le_bytes(&R_point_bytes),
-                )
-                .unwrap();
+                );
+ 
+                // Return error for result being the point at infinity.
+                if p.is_infinity() {
+                    return Err(Error::new());
+                }
 
                 let mut le_bytes = p.to_le_bytes();
                 let (x, y) = le_bytes.split_at_mut(32);
