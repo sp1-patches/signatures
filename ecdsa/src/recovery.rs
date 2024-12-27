@@ -348,7 +348,7 @@ where
     /// We offload the scalar multiplication and certian field ops (invert, sqrt) to the host,
     /// to be hinted back to the vm, which can then be constrained to be accurate.
     #[allow(warnings)]
-    #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+    //#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
     fn recover_from_prehash_zkvm(
         r: NonZeroScalar<C>,
         R_x_bytes: [u8; 32],
@@ -363,6 +363,7 @@ where
         if &R_x >= base_field_params.modulus() {
             return Err(Error::new());
         }
+
         let R_x = DynResidue::new(&R_x, base_field_params);
         // The first step of the recovery is to decompress the R point, whose x-coordinate is given
         // by r_x_bytes.
@@ -397,9 +398,12 @@ where
         // The point R in the form [x || y] where x and y are 32 bytes each, big endian.
         let R_y_bytes = sp1_lib::io::read_vec(); 
         let R_y = U256::from_be_slice(&R_y_bytes);
+
         // `R_y` hint should be in canonical form.
         assert!(&R_y < base_field_params.modulus(), "hint should return canonical value");
+
         let R_y = DynResidue::new(&R_y, base_field_params);
+
         // The y-coordinate must be the sqrt of alpha
         assert!(R_y * R_y == alpha, "Invalid hint for R_y");
 
@@ -439,7 +443,7 @@ where
             R_point_bytes
         };
 
-        let pk_bytes = match curve_id {
+        let mut pk_le_bytes: [u8; 64] = match curve_id {
             // secp256k1
             1 => {
                 let p = Secp256k1Point::multi_scalar_multiplication(
@@ -454,16 +458,7 @@ where
                     return Err(Error::new());
                 }
 
-                let mut le_bytes = p.to_le_bytes();
-                let (x, y) = le_bytes.split_at_mut(32);
-                x.reverse();
-                y.reverse();
-
-                let mut be_bytes = [0u8; 64];
-                be_bytes[0..32].copy_from_slice(&x);
-                be_bytes[32..].copy_from_slice(&y);
-
-                be_bytes
+                p.to_le_bytes().try_into().expect("a valid point should have 64 bytes")    
             }
             2 => {
                 let p = Secp256r1Point::multi_scalar_multiplication(
@@ -478,8 +473,16 @@ where
                     return Err(Error::new());
                 }
 
-                let mut le_bytes = p.to_le_bytes();
-                let (x, y) = le_bytes.split_at_mut(32);
+                p.to_le_bytes().try_into().expect("a valid point should have 64 bytes")
+                            
+            }
+            _ => unimplemented!(),
+        };
+       
+        // Convert the point to big endian.
+        let pk_bytes = {
+                let (x, y) = pk_le_bytes.split_at_mut(32);
+
                 x.reverse();
                 y.reverse();
 
@@ -488,8 +491,7 @@ where
                 be_bytes[32..].copy_from_slice(&y);
 
                 be_bytes
-            }
-            _ => unimplemented!(),
+
         };
 
         let encoded_point =
@@ -503,7 +505,7 @@ where
 
 /// Convert big-endian bytes with the most significant bit first to little-endian bytes with the least significant bit first.
 #[inline]
-#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+//#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
     let mut bits = [false; 256];
     // Reverse the byte order to little-endian.
@@ -519,8 +521,11 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 #[cfg(target_os = "zkvm")]
 type ECParams = (DynResidue<8>, DynResidue<8>, DynResidue<8>, DynResidueParams<8>, u8);
 
+#[cfg(not(target_os = "zkvm"))]
+type ECParams = (DynResidue<4>, DynResidue<4>, DynResidue<4>, DynResidueParams<4>, u8);
+
 #[inline]
-#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+//#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 fn ec_params_256_bit<C: Curve>() -> ECParams {
     // 3 is the non-quadratic residue of the base field of secp256k1 and secp256r1.
     const NQR: [u8; 32] = {
