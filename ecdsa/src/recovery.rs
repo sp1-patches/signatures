@@ -44,7 +44,7 @@ use {
             ArrayEncoding, Encoding, U256,
         },
         sec1::EncodedPoint,
-        Curve,
+        Curve, scalar::IsHigh,
     },
     sp1_lib::{
         secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
@@ -460,6 +460,11 @@ where
         let mut pk_le_bytes: [u8; 64] = match curve_id {
             // secp256k1
             1 => {
+
+                if s.is_high().into() {
+                    return Err(Error::new());
+                }
+
                 let p = Secp256k1Point::multi_scalar_multiplication(
                     &u1_le_bits,
                     Secp256k1Point::new(Secp256k1Point::GENERATOR),
