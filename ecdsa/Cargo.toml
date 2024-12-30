@@ -29,9 +29,8 @@ spki = { version = "0.7.2", optional = true, default-features = false }
 cfg-if = "1.0"
 hex-literal = "0.4"
 
-# [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-lib = { git = "https://github.com/succinctlabs/sp1-wip", branch = "min/patch-tests" }
-anyhow = "1.0"
+[target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
+sp1-lib = "4.0.0-rc.3" 
 
 [dev-dependencies]
 elliptic-curve = { version = "0.13", default-features = false, features = ["dev"] }

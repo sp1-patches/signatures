@@ -35,7 +35,7 @@ use {
     signature::digest::Digest,
 };
 
-//#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 use {
     digest::generic_array::GenericArray,
     elliptic_curve::{
@@ -355,7 +355,7 @@ where
     /// We offload the scalar multiplication and certian field ops (invert, sqrt) to the host,
     /// to be hinted back to the vm, which can then be constrained to be accurate.
     #[allow(warnings)]
-    //#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+    #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
     fn recover_from_prehash_zkvm(
         r: NonZeroScalar<C>,
         R_x_bytes: [u8; 32],
@@ -528,7 +528,7 @@ where
 
 /// Convert big-endian bytes with the most significant bit first to little-endian bytes with the least significant bit first.
 #[inline]
-//#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
     let mut bits = [false; 256];
     // Reverse the byte order to little-endian.
@@ -560,7 +560,7 @@ type ECParams = (
 );
 
 #[inline]
-//#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 fn ec_params_256_bit<C: Curve>() -> ECParams {
     // 3 is the non-quadratic residue of the base field of secp256k1 and secp256r1.
     const NQR: [u8; 32] = {
