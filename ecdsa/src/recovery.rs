@@ -550,15 +550,6 @@ type ECParams = (
     u8,
 );
 
-#[cfg(not(target_os = "zkvm"))]
-type ECParams = (
-    DynResidue<4>,
-    DynResidue<4>,
-    DynResidue<4>,
-    DynResidueParams<4>,
-    u8,
-);
-
 #[inline]
 #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 fn ec_params_256_bit<C: Curve>() -> ECParams {
