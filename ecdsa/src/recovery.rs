@@ -37,14 +37,16 @@ use {
 
 #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
 use {
+    crate::ec_params_256_bit,
     digest::generic_array::GenericArray,
     elliptic_curve::{
         bigint::{
             modular::runtime_mod::{DynResidue, DynResidueParams},
             ArrayEncoding, Encoding, U256,
         },
+        scalar::IsHigh,
         sec1::EncodedPoint,
-        Curve, scalar::IsHigh,
+        Curve,
     },
     sp1_lib::{
         secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
@@ -460,7 +462,6 @@ where
         let mut pk_le_bytes: [u8; 64] = match curve_id {
             // secp256k1
             1 => {
-
                 if s.is_high().into() {
                     return Err(Error::new());
                 }
@@ -539,83 +540,6 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
         }
     }
     bits
-}
-
-#[cfg(target_os = "zkvm")]
-type ECParams = (
-    DynResidue<8>,
-    DynResidue<8>,
-    DynResidue<8>,
-    DynResidueParams<8>,
-    u8,
-);
-
-#[inline]
-#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
-fn ec_params_256_bit<C: Curve>() -> ECParams {
-    // 3 is the non-quadratic residue of the base field of secp256k1 and secp256r1.
-    const NQR: [u8; 32] = {
-        let mut nqr = [0; 32];
-        nqr[31] = 3;
-        nqr
-    };
-
-    // Reference: https://en.bitcoin.it/wiki/Secp256k1.
-    // This is the order of the elliptic curve group.
-    const SECP256K1_ORDER: [u8; 32] =
-        hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-    const SECP256K1_BASE_FIELD_ORDER: [u8; 32] =
-        hex_literal::hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F");
-    // SECP256K1_A
-    const SECP256K1_A: [u8; 32] = [0; 32];
-    // SECP256K1_B
-    const SECP256K1_B: [u8; 32] = {
-        let mut b = [0u8; 32];
-        b[31] = 7;
-        b
-    };
-
-    // Reference: https://neuromancer.sk/std/secg/secp256r1.
-    // This is the order of the elliptic curve group.
-    const SECP256R1_ORDER: [u8; 32] =
-        hex_literal::hex!("FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
-    const SECP256R1_BASE_FIELD_ORDER: [u8; 32] =
-        hex_literal::hex!("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
-    // SECP256R1_A
-    const SECP256R1_A: [u8; 32] =
-        hex_literal::hex!("ffffffff00000001000000000000000000000000fffffffffffffffffffffffc");
-    // SECP256R1_B
-    const SECP256R1_B: [u8; 32] =
-        hex_literal::hex!("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
-
-    let a;
-    let b;
-    let base_field_params;
-    let curve_id;
-
-    if C::ORDER.to_be_byte_array().as_slice() == SECP256K1_ORDER.as_slice() {
-        base_field_params = DynResidueParams::new(&U256::from_be_bytes(SECP256K1_BASE_FIELD_ORDER));
-
-        a = DynResidue::new(&U256::from_be_bytes(SECP256K1_A), base_field_params);
-        b = DynResidue::new(&U256::from_be_bytes(SECP256K1_B), base_field_params);
-        curve_id = 1;
-    } else if C::ORDER.to_be_byte_array().as_slice() == SECP256R1_ORDER.as_slice() {
-        base_field_params = DynResidueParams::new(&U256::from_be_bytes(SECP256R1_BASE_FIELD_ORDER));
-
-        a = DynResidue::new(&U256::from_be_bytes(SECP256R1_A), base_field_params);
-        b = DynResidue::new(&U256::from_be_bytes(SECP256R1_B), base_field_params);
-        curve_id = 2;
-    } else {
-        unimplemented!("Unsupported curve");
-    };
-
-    (
-        a,
-        b,
-        DynResidue::new(&U256::from_be_bytes(NQR), base_field_params),
-        base_field_params,
-        curve_id,
-    )
 }
 
 #[cfg(test)]

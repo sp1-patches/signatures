@@ -1,5 +1,12 @@
 //! ECDSA verifying: checking signatures are authentic using a [`VerifyingKey`].
+//!
+//! # ⚠️ Warning: our patching can cause issues for users who want to use VerifyingKey on curves that don't
+//!  implement the traits:
+//!     AffinePoint<C>:
+//!     DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C>,
+//!     FieldBytesSize<C>: sec1::ModulusSize,
 
+use crate::RecoveryId;
 use crate::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
@@ -7,9 +14,9 @@ use crate::{
 use core::{cmp::Ordering, fmt::Debug};
 use elliptic_curve::{
     generic_array::ArrayLength,
-    point::PointCompression,
+    point::{DecompressPoint, PointCompression},
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
+    AffinePoint, CurveArithmetic, FieldBytesEncoding, FieldBytesSize, PrimeCurve, PublicKey,
 };
 use signature::{
     digest::{Digest, FixedOutput},
@@ -47,6 +54,14 @@ use {
 
 #[cfg(all(feature = "pem", feature = "serde"))]
 use serdect::serde::{de, ser, Deserialize, Serialize};
+
+cfg_if::cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+        use crate::ec_params_256_bit;
+        use digest::generic_array::GenericArray;
+        use elliptic_curve::Curve;
+    }
+}
 
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
@@ -136,6 +151,124 @@ where
     pub fn as_affine(&self) -> &AffinePoint<C> {
         self.inner.as_affine()
     }
+
+    /// Verify the prehashed message against the provided ECDSA signature using SP1 acceleration.
+    /// (essentially the same as verify_signature_secp256, but only takes in signature and finds inverse of s)
+    /// Accepts the following arguments:
+    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
+    /// - `msg_hash`: The prehashed message to verify the signature against.
+    /// - `signature`: The signature to verify.
+    /// - `ec_params`: The elliptic curve parameters.
+    #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+    pub fn verify_prehash_secp256(
+        pubkey: &[u8; 65],
+        prehash: &[u8],
+        signature: &Signature<C>,
+        ec_params: ECParams,
+    ) -> Result<()> {
+        let mut sig_bytes = [0u8; 64];
+        sig_bytes.copy_from_slice(&signature.to_bytes());
+        let s_inv = recover_s_inv_unconstrained(&sig_bytes);
+
+        // Convert the s_inverse bytes to a scalar.
+        let s_inverse = Scalar::<C>::from_repr(bits2field::<C>(&s_inv).unwrap()).unwrap();
+        let verified = Self::verify_signature_secp256(
+            pubkey,
+            prehash.try_into().unwrap(),
+            signature,
+            &s_inverse,
+            ec_params,
+        );
+        if verified {
+            Ok(())
+        } else {
+            Err(Error::new())
+        }
+    }
+
+    /// Verify the prehashed message against the provided ECDSA signature.
+    ///
+    /// Accepts the following arguments:
+    /// - `pubkey`: The public key to verify the signature against. The public key is in uncompressed form. The points
+    /// are represented as big-endian bytes and need to be converted to little endian to instantiate the Secp256k1Point.
+    /// - `msg_hash`: The prehashed message to verify the signature against.
+    /// - `signature`: The signature to verify.
+    /// - `s_inverse`: The inverse of the scalar `s` in the signature.
+    ///
+    /// This function is a modified version of [`crate::hazmat::verify_prehashed`] with
+    /// changes implemented to support SP1 acceleration.
+    #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+    pub fn verify_signature_secp256(
+        pubkey: &[u8; 65],
+        msg_hash: &[u8; 32],
+        signature: &Signature<C>,
+        s_inverse: &Scalar<C>,
+        curve_id: u8,
+    ) -> bool {
+        let mut pubkey_x_le_bytes = pubkey[1..33].to_vec();
+        pubkey_x_le_bytes.reverse();
+        let mut pubkey_y_le_bytes = pubkey[33..].to_vec();
+        pubkey_y_le_bytes.reverse();
+
+        // Split the signature into its two scalars.
+        let (r, s) = signature.split_scalars();
+        assert_eq!(*s_inverse * s.as_ref(), Scalar::<C>::ONE);
+        // Convert the message hash into a scalar.
+        let field = bits2field::<C>(msg_hash);
+        if field.is_err() {
+            return false;
+        }
+        let field: Scalar<C> = Scalar::<C>::from_repr(field.unwrap()).unwrap();
+        let z = field;
+        // Compute the two scalars.
+        let u1 = z * s_inverse;
+        let u2 = *r * s_inverse;
+        // Convert u1 and u2 to "little-endian" bits (LSb first with little-endian byte order) for the MSM.
+        let (u1_be_bytes, u2_be_bytes) = (u1.to_repr(), u2.to_repr());
+        let u1_le_bits = be_bytes_to_le_bits(u1_be_bytes.as_slice().try_into().unwrap());
+        let u2_le_bits = be_bytes_to_le_bits(u2_be_bytes.as_slice().try_into().unwrap());
+
+        // Compute the MSM.
+        let x_bytes_be = match curve_id {
+            1 => {
+                let point = Secp256k1Point::multi_scalar_multiplication(
+                    &u1_le_bits,
+                    Secp256k1Point::new(Secp256k1Point::GENERATOR),
+                    &u2_le_bits,
+                    Secp256k1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                );
+                let p = point.unwrap();
+
+                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                let mut x_bytes_be = [0u8; 32];
+                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                x_bytes_be.reverse();
+                x_bytes_be
+            }
+            2 => {
+                let point = Secp256r1Point::multi_scalar_multiplication(
+                    &u1_le_bits,
+                    Secp256r1Point::new(Secp256r1Point::GENERATOR),
+                    &u2_le_bits,
+                    Secp256r1Point::from_le_bytes(&[pubkey_x_le_bytes, pubkey_y_le_bytes].concat()),
+                );
+                let p = point.unwrap();
+
+                // Convert the result of the MSM into a scalar and confirm that it matches the R value of the signature.
+                let mut x_bytes_be = [0u8; 32];
+                x_bytes_be[..32].copy_from_slice(&p.to_le_bytes()[..32]);
+                x_bytes_be.reverse();
+                x_bytes_be
+            }
+        };
+
+        let x_field = bits2field::<C>(&x_bytes_be);
+        if x_field.is_err() {
+            return false;
+        }
+        return *r == Scalar::<C>::from_repr(x_field.unwrap()).unwrap();
+    }
 }
 
 //
@@ -146,10 +279,18 @@ impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                PrehashVerifier::<Signature<C>>::verify_prehash(self, &msg_digest.finalize_fixed(), signature)?;
+                return Ok(());
+            }
+        }
         self.inner.as_affine().verify_digest(msg_digest, signature)
     }
 }
@@ -157,10 +298,23 @@ where
 impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_vendor = "succinct"))] {
+                let ec_params = ec_params_256_bit::<C>();
+                let point = self.inner.to_encoded_point(false);
+                let pubkey = point.as_bytes();
+                let pubkey_array: &[u8; 65] = pubkey.try_into().unwrap();
+                Self::verify_prehash_secp256(pubkey_array, prehash, signature, ec_params)?;
+                return Ok(());
+            }
+
+        }
         let field = bits2field::<C>(prehash)?;
         self.inner.as_affine().verify_prehashed(&field, signature)
     }
@@ -169,7 +323,9 @@ where
 impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
@@ -181,7 +337,9 @@ where
 impl<C> Verifier<SignatureWithOid<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
 {
     fn verify(&self, msg: &[u8], sig: &SignatureWithOid<C>) -> Result<()> {
@@ -200,7 +358,9 @@ impl<C, D> DigestVerifier<D, der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
@@ -215,7 +375,9 @@ where
 impl<C> PrehashVerifier<der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
@@ -230,7 +392,9 @@ where
 impl<C> Verifier<der::Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive,
-    AffinePoint<C>: VerifyPrimitive<C>,
+    AffinePoint<C>:
+        DecompressPoint<C> + FromEncodedPoint<C> + ToEncodedPoint<C> + VerifyPrimitive<C>,
+    FieldBytesSize<C>: sec1::ModulusSize,
     SignatureSize<C>: ArrayLength<u8>,
     der::MaxSize<C>: ArrayLength<u8>,
     <FieldBytesSize<C> as Add>::Output: Add<der::MaxOverhead> + ArrayLength<u8>,
