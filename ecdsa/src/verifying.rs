@@ -60,6 +60,12 @@ cfg_if::cfg_if! {
         use crate::ec_params_256_bit;
         use digest::generic_array::GenericArray;
         use elliptic_curve::Curve;
+        use sp1_lib::{
+            io::self,
+            unconstrained,
+            secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
+            utils::WeierstrassAffinePoint,
+        };
     }
 }
 
@@ -643,4 +649,18 @@ where
     {
         PublicKey::<C>::deserialize(deserializer).map(Into::into)
     }
+}
+
+/// Outside of the VM, computes the s_inverse value from a signature.
+///
+/// WARNING: The values are read from outside of the VM and are not constrained to be correct. Use
+/// [`VerifyingKey::recover_from_prehash_secp256`] to securely recover the public key associated with
+/// a signature and message hash.
+#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+fn recover_s_inv_unconstrained(sig: &[u8; 64]) -> [u8; 32] {
+    unconstrained! {
+        io::write(R1_ECRECOVER_HOOK, sig);
+    }
+    let s_inv_bytes_le: [u8; 32] = io::read_vec().try_into().unwrap();
+    s_inv_bytes_le
 }

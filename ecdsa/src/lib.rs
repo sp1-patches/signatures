@@ -118,6 +118,12 @@ use elliptic_curve::pkcs8::spki::{
     self, AlgorithmIdentifierOwned, DynAssociatedAlgorithmIdentifier,
 };
 
+#[cfg(all(target_os = "zkvm", target_vendor = "succinct"))]
+use elliptic_curve::bigint::{
+    modular::runtime_mod::{DynResidue, DynResidueParams},
+    U256,
+};
+
 /// OID for ECDSA with SHA-224 digests.
 ///
 /// ```text
