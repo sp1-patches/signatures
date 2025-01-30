@@ -43,8 +43,9 @@ use {
             modular::runtime_mod::{DynResidue, DynResidueParams},
             ArrayEncoding, Encoding, U256,
         },
+        scalar::IsHigh,
         sec1::EncodedPoint,
-        Curve, scalar::IsHigh,
+        Curve,
     },
     sp1_lib::{
         secp256k1::Secp256k1Point, secp256r1::Secp256r1Point, utils::AffinePoint as Sp1AffinePoint,
@@ -371,7 +372,7 @@ where
             return Err(Error::new());
         }
 
-        let R_x = DynResidue::new(&R_x, base_field_params);
+        let R_x = DynResidue::<4>::new(&R_x, base_field_params);
         // The first step of the recovery is to decompress the R point, whose x-coordinate is given
         // by r_x_bytes.
         let alpha = R_x * R_x * R_x + (a * R_x) + b;
@@ -395,7 +396,7 @@ where
             // The status indicates that the recovery failed.
             // So we need to constrain the by proving alpha is non square in the base field.
             let root_bytes = sp1_lib::io::read_vec();
-            let root = DynResidue::new(&U256::from_be_slice(&root_bytes), base_field_params);
+            let root = DynResidue::<4>::new(&U256::from_be_slice(&root_bytes), base_field_params);
 
             assert!(root * root == alpha * nqr, "Invalid hint for status");
 
@@ -412,7 +413,7 @@ where
             "hint should return canonical value"
         );
 
-        let R_y = DynResidue::new(&R_y, base_field_params);
+        let R_y = DynResidue::<4>::new(&R_y, base_field_params);
 
         // The y-coordinate must be the sqrt of alpha
         assert!(R_y * R_y == alpha, "Invalid hint for R_y");
@@ -460,7 +461,6 @@ where
         let mut pk_le_bytes: [u8; 64] = match curve_id {
             // secp256k1
             1 => {
-
                 if s.is_high().into() {
                     return Err(Error::new());
                 }
@@ -543,10 +543,10 @@ fn be_bytes_to_le_bits(be_bytes: &[u8; 32]) -> [bool; 256] {
 
 #[cfg(target_os = "zkvm")]
 type ECParams = (
-    DynResidue<8>,
-    DynResidue<8>,
-    DynResidue<8>,
-    DynResidueParams<8>,
+    DynResidue<4>,
+    DynResidue<4>,
+    DynResidue<4>,
+    DynResidueParams<4>,
     u8,
 );
 
@@ -594,16 +594,18 @@ fn ec_params_256_bit<C: Curve>() -> ECParams {
     let curve_id;
 
     if C::ORDER.to_be_byte_array().as_slice() == SECP256K1_ORDER.as_slice() {
-        base_field_params = DynResidueParams::new(&U256::from_be_bytes(SECP256K1_BASE_FIELD_ORDER));
+        base_field_params =
+            DynResidueParams::<4>::new(&U256::from_be_bytes(SECP256K1_BASE_FIELD_ORDER));
 
-        a = DynResidue::new(&U256::from_be_bytes(SECP256K1_A), base_field_params);
-        b = DynResidue::new(&U256::from_be_bytes(SECP256K1_B), base_field_params);
+        a = DynResidue::<4>::new(&U256::from_be_bytes(SECP256K1_A), base_field_params);
+        b = DynResidue::<4>::new(&U256::from_be_bytes(SECP256K1_B), base_field_params);
         curve_id = 1;
     } else if C::ORDER.to_be_byte_array().as_slice() == SECP256R1_ORDER.as_slice() {
-        base_field_params = DynResidueParams::new(&U256::from_be_bytes(SECP256R1_BASE_FIELD_ORDER));
+        base_field_params =
+            DynResidueParams::<4>::new(&U256::from_be_bytes(SECP256R1_BASE_FIELD_ORDER));
 
-        a = DynResidue::new(&U256::from_be_bytes(SECP256R1_A), base_field_params);
-        b = DynResidue::new(&U256::from_be_bytes(SECP256R1_B), base_field_params);
+        a = DynResidue::<4>::new(&U256::from_be_bytes(SECP256R1_A), base_field_params);
+        b = DynResidue::<4>::new(&U256::from_be_bytes(SECP256R1_B), base_field_params);
         curve_id = 2;
     } else {
         unimplemented!("Unsupported curve");
@@ -612,7 +614,7 @@ fn ec_params_256_bit<C: Curve>() -> ECParams {
     (
         a,
         b,
-        DynResidue::new(&U256::from_be_bytes(NQR), base_field_params),
+        DynResidue::<4>::new(&U256::from_be_bytes(NQR), base_field_params),
         base_field_params,
         curve_id,
     )
