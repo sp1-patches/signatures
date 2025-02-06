@@ -309,8 +309,13 @@ where
         let pk = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, &R, &u2);
         let vk = Self::from_affine(pk.into())?;
 
+        // `sp1-patch`: Verifying with the recovered key is not needed as
+        // `VerifyPrimitive` checks things like low-s values before
+        // this code block is hit.
+        // Ref: <https://github.com/RustCrypto/signatures/pull/831>
+        //
         // Ensure signature verifies with the recovered key
-        vk.verify_prehash(prehash, signature)?;
+        // vk.verify_prehash(prehash, signature)?;
 
         Ok(vk)
     }
