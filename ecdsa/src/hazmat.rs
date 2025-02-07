@@ -123,6 +123,8 @@ where
     C: PrimeCurve + CurveArithmetic<AffinePoint = Self>,
     SignatureSize<C>: ArrayLength<u8>,
 {
+    const HIGH_S_ALLOWED: bool;
+
     /// Verify the prehashed message against the provided ECDSA signature.
     ///
     /// Accepts the following arguments:

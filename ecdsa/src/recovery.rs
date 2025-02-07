@@ -29,7 +29,7 @@ use {
         Signature, SignatureSize,
     },
     elliptic_curve::{
-        generic_array::ArrayLength, ops::Invert, CurveArithmetic, PrimeCurve, Scalar,
+        generic_array::ArrayLength, ops::Invert, CurveArithmetic, PrimeCurve, Scalar, scalar::IsHigh,
     },
     signature::digest::Digest,
 };
@@ -309,15 +309,26 @@ where
         let pk = ProjectivePoint::<C>::lincomb(&ProjectivePoint::<C>::generator(), &u1, &R, &u2);
         let vk = Self::from_affine(pk.into())?;
 
-        // `sp1-patch`: Verifying with the recovered key is not needed as
-        // `VerifyPrimitive` checks things like low-s values before
-        // this code block is hit.
+        // `sp1-patch`: Verifying with the recovered key is not needed,
+        //  as the prupose of this check is for curves that require low-s.
+        // 
+        //  The verification is replaced with a simple check.
+        //
         // Ref: <https://github.com/RustCrypto/signatures/pull/831>
         //
         // Ensure signature verifies with the recovered key
         // vk.verify_prehash(prehash, signature)?;
 
-        Ok(vk)
+        if <AffinePoint<C> as VerifyPrimitive<C>>::HIGH_S_ALLOWED {
+            Ok(vk)
+        } else {
+            // Check that the signature has low-s
+            if s.is_high().into() {
+                Err(Error::new())
+            } else {
+                Ok(vk)
+            }
+        }
     }
 }
 
