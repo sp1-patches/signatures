@@ -30,7 +30,7 @@ cfg-if = "1.0"
 hex-literal = "0.4"
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-lib = "4.0.0" 
+sp1-lib = "5.0.0" 
 
 [dev-dependencies]
 elliptic-curve = { version = "0.13", default-features = false, features = ["dev"] }
